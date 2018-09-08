@@ -13,17 +13,94 @@
 #include <errno.h>
 
 #define MAXBUFSIZE 1024
+char inp[30];
+int sock;                               //this will be our socket
+struct sockaddr_in remote;              //"Internet socket address structure"
 
+int opt(){
+		printf("Enter Options as given below\n");
+		printf("1 : Put file \n2: Get File \n");
 
+		fgets(inp,30,stdin);
+    if(inp[0]=='g')
+			return 2;
+		if(inp[0]=='p')
+			return 1;
+		if(inp[0]=='l')
+			return 3;
+		if(inp[0]=='d')
+			return 4;
+		if(inp[0]=='e')
+			return 5;
+		return 0;
+}
+// put file to server function
+void put_file(char* file)
+{
+	FILE *fp;	char buff[MAXBUFSIZE];
+	char filename[100]="/home/gautham/Network Systems/P_1/udp/";
+	strcat(filename,file);
+	int n,nbytes;
+	fp=fopen(filename,"r");
+	if(fp==NULL)
+		perror("fopen:\n");
+ 	int option =1;
+	if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+			perror("send to:\n");
+	if(sendto(sock, file,sizeof(file),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+			perror("send to:\n");
+	while(1){
+		n=fread(buff,sizeof(char),MAXBUFSIZE,fp);
+		printf("Client reading Packet: %d \n",n);
+
+		if(n==MAXBUFSIZE){
+		nbytes=sendto(sock, buff,MAXBUFSIZE,0,(struct sockaddr *)&remote, sizeof(remote));
+		printf("Client Sending Packet: %d \n",nbytes);
+		}
+
+		else if(n<MAXBUFSIZE){
+			printf("Sending Last Packet \n");
+			if(nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&remote, sizeof(remote))<0)
+				perror("sendto:");
+		break;
+		}
+	}
+}
+
+void get_file(char *file){
+	 char buf[MAXBUFSIZE];
+	 int remote_length=sizeof(remote);
+	 int option =2;
+ if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+		 perror("send to:\n");
+   // sending filename to server to fetch the file
+	 if(sendto(sock, file,sizeof(file),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+ 			perror("send to:\n");
+	printf("Filename : %s\n",file);
+
+	char filename[100]="~";
+	strcat(filename,file);
+	FILE *fp;
+	//int fd= open(filename,O_RDWR | O_CREAT,0777);
+	fp=fopen(filename,"w+");
+	if(fp==NULL)
+		perror("open:");
+	int n=0,nbytes;
+	while(1){
+		nbytes = recvfrom(sock,buf,sizeof(buf), 0, (struct sockaddr *)&remote, &remote_length);
+		printf("NBYTES %d\n",nbytes);
+
+		n=fwrite(buf,sizeof(char),nbytes,fp);
+		printf("write bytes %d\n",n);
+		if(n<MAXBUFSIZE)
+			break;
+	}
+
+ }
 
 int main (int argc, char * argv[])
 {
-
-	int nbytes;                             // number of bytes send by sendto()
-	int sock;                               //this will be our socket
-	char buffer[MAXBUFSIZE],buff[MAXBUFSIZE];
-
-	struct sockaddr_in remote;              //"Internet socket address structure"
+	char buffer[MAXBUFSIZE];
 	if (argc < 3)
 	{
 		printf("USAGE:  <server_ip> <server_port>\n");
@@ -35,45 +112,26 @@ int main (int argc, char * argv[])
 	remote.sin_port = htons(atoi(argv[2]));      //sets port to network byte order
 	remote.sin_addr.s_addr = inet_addr(argv[1]); //sets remote IP address
 	if ((sock = socket(PF_INET,SOCK_DGRAM,0)) < 0)
-	{
 		printf("unable to create socket");
+	int on=1;
+	setsockopt(sock,SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+ // get option from user
+  char file_name[40];char file[20];
+	memset(file_name, '\0', sizeof(file_name));
+  int option = opt();
+	if(option==1){
+		strcpy(file_name,inp);
+    sscanf(file_name,"%s %s",file,file);
+ 		// put file to server
+		put_file(file);
 	}
 
-
-	char command[] = "apple";
-	int on=1,n=0;
-	setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));	
-	FILE *fp;
-	const char filename[100]="/home/gautham/Network Systems/P_1/udp/foo1";
-	fp=fopen(filename,"r");
-	if(fp==NULL)
-		perror("fopen:\n");
-
-	while(1){
-		
-		n=fread(buff,sizeof(char),MAXBUFSIZE,fp);
-		if(n==MAXBUFSIZE)
-			if(nbytes=sendto(sock, buff,MAXBUFSIZE,0, (struct sockaddr *)&remote, sizeof(remote))<0)
-				perror("sendto:");
-
-		if(n<MAXBUFSIZE){
-			printf("Sending Last Packet \n");
-			if(nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&remote, sizeof(remote))<0)
-				perror("sendto:");
-		break;
-		}
+	else if(option==2){
+		strcpy(file_name,inp);
+		sscanf(file_name,"%s %s",file,file);
+		// get file from server
+		get_file(file);
 	}
-
-
-
-	struct sockaddr_in from_addr;
-	int addr_length = sizeof(struct sockaddr);
-	bzero(buffer,sizeof(buffer));
-	nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *)&remote, &addr_length);
-
-	printf("Server says %s\n", buffer);
-
 	close(sock);
 
 }
-
