@@ -19,12 +19,11 @@ struct sockaddr_in sin1,remote;     //"Internet socket address structure"
 unsigned int remote_length;         //length of the sockaddr_in structure
 
 void put_in_server(){
-
   char file[20],buf[MAXBUFSIZE];
 	if(recvfrom(sock, file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length)<0)
 			perror("recv:\n");
- 	printf("Filename Recvd: %s\n",file);
-	char filename[100]="~";
+ 	//printf("Filename Recvd: %s\n",file);
+  char filename[100]="~";
 	strcat(filename,file);
   printf("Filename Recvd: %s\n",filename);
 	FILE *fp;
@@ -32,15 +31,19 @@ void put_in_server(){
 	fp=fopen(filename,"w+");
 	if(fp==NULL)
 		perror("open:");
-	int n=0,nbytes;
+	int n=0,nbytes=0;
 	while(1){
-		nbytes = recvfrom(sock, buf,sizeof(buf), 0, (struct sockaddr *)&sin1, &remote_length);
-		printf("NBYTES %d\n",nbytes);
-
+    bzero(buf,sizeof(buf));
+		nbytes = recvfrom(sock, buf,sizeof(buf), 0, (struct sockaddr*)&sin1, &remote_length);
+		//printf("bytes %d\n",nbytes);
 		n=fwrite(buf,sizeof(char),nbytes,fp);
 		printf("write bytes %d\n",n);
 		if(n<MAXBUFSIZE)
-			break;
+    {
+      fclose(fp);
+	     break;
+    }
+
 	}
 }
 
@@ -105,13 +108,18 @@ int main (int argc, char * argv[] )
 
 	int option;
  //client put file to server
-  recvfrom(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1, &remote_length);
-	if(option==1){
-		// store file into server
-		put_in_server();
-	}
-  else if(option==2){
-    send_file_server();
-  }
-	close(sock);
+ while(1){
+  recvfrom(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1,&remote_length);
+ 	if(option==1){
+ 		// store file into server
+ 		put_in_server();
+    //final ack
+  sendto(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1,remote_length);
+ 	}
+   else if(option==2){
+     send_file_server();
+   }
+ }
+ close(sock);
+
 }

@@ -16,7 +16,7 @@
 char inp[30];
 int sock;                               //this will be our socket
 struct sockaddr_in remote;              //"Internet socket address structure"
-
+int remote_length;
 int opt(){
 		printf("Enter Options as given below\n");
 		printf("1 : Put file \n2: Get File \n");
@@ -50,8 +50,9 @@ void put_file(char* file)
 	if(sendto(sock, file,sizeof(file),0, (struct sockaddr *)&remote, sizeof(remote))<0)
 			perror("send to:\n");
 	while(1){
+		bzero(buff,sizeof(buff));
 		n=fread(buff,sizeof(char),MAXBUFSIZE,fp);
-		printf("Client reading Packet: %d \n",n);
+	//	printf("Client reading Packet: %d \n",n);
 
 		if(n==MAXBUFSIZE){
 		nbytes=sendto(sock, buff,MAXBUFSIZE,0,(struct sockaddr *)&remote, sizeof(remote));
@@ -60,16 +61,16 @@ void put_file(char* file)
 
 		else if(n<MAXBUFSIZE){
 			printf("Sending Last Packet \n");
-			if(nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&remote, sizeof(remote))<0)
-				perror("sendto:");
-		break;
+			nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&remote, sizeof(remote));
+		  break;
+			fclose(fp);
 		}
+
 	}
 }
 
 void get_file(char *file){
 	 char buf[MAXBUFSIZE];
-	 int remote_length=sizeof(remote);
 	 int option =2;
  if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
 		 perror("send to:\n");
@@ -95,9 +96,13 @@ void get_file(char *file){
 		if(n<MAXBUFSIZE)
 			break;
 	}
-
- }
-
+}
+void list_files()
+{}
+void delete_file(char * file)
+{}
+void exit_operation()
+{}
 int main (int argc, char * argv[])
 {
 	char buffer[MAXBUFSIZE];
@@ -106,7 +111,7 @@ int main (int argc, char * argv[])
 		printf("USAGE:  <server_ip> <server_port>\n");
 		exit(1);
 	}
-
+  remote_length=sizeof(remote);
 	bzero(&remote,sizeof(remote));               //zero the struct
 	remote.sin_family = AF_INET;                 //address family
 	remote.sin_port = htons(atoi(argv[2]));      //sets port to network byte order
@@ -118,20 +123,40 @@ int main (int argc, char * argv[])
  // get option from user
   char file_name[40];char file[20];
 	memset(file_name, '\0', sizeof(file_name));
-  int option = opt();
-	if(option==1){
-		strcpy(file_name,inp);
-    sscanf(file_name,"%s %s",file,file);
- 		// put file to server
-		put_file(file);
-	}
 
-	else if(option==2){
-		strcpy(file_name,inp);
-		sscanf(file_name,"%s %s",file,file);
-		// get file from server
-		get_file(file);
-	}
+  int option;
+	while(1){
+			option = opt();
+			if(option==1){
+				strcpy(file_name,inp);
+		    sscanf(file_name,"%s %s",file,file);
+		 		// put file to server
+				put_file(file);
+				recvfrom(sock,&option,sizeof(option), 0, (struct sockaddr *)&remote, &remote_length);
+
+			}
+
+			else if(option==2){
+				strcpy(file_name,inp);
+				sscanf(file_name,"%s %s",file,file);
+				// get file from server
+				get_file(file);
+			}
+			else if(option==3){
+				list_files();
+			}
+			else if(option==4){
+				strcpy(file_name,inp);
+				sscanf(file_name,"%s %s",file,file);
+				// get file from server
+				delete_file(file);
+			}
+			else if(option==4){
+				strcpy(file_name,inp);
+				sscanf(file_name,"%s %s",file,file);
+				// get file from server
+				exit_operation();
+			}
+		}
 	close(sock);
-
 }
