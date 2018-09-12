@@ -17,13 +17,25 @@
 int sock;                           //This will be our socket
 struct sockaddr_in sin1,remote;     //"Internet socket address structure"
 unsigned int remote_length;         //length of the sockaddr_in structure
+//packet structure
+typedef struct packet{
+  uint16_t seq_num;
+	uint16_t ack;
+	char buff[MAXBUFSIZE];
+}packet_t;
+
+typedef struct ack{
+	uint16_t seq;
+	uint16_t ack;
+}ack_pk_t;
+
 
 void put_in_server(){
-  char file[20],buf[MAXBUFSIZE];
-	if(recvfrom(sock, file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length)<0)
+  char file[10];
+	if(recvfrom(sock,file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length)<0)
 			perror("recv:\n");
  	//printf("Filename Recvd: %s\n",file);
-  char filename[100]="~";
+  char filename[10]="~";
 	strcat(filename,file);
   printf("Filename Recvd: %s\n",filename);
 	FILE *fp;
@@ -32,53 +44,80 @@ void put_in_server(){
 	if(fp==NULL)
 		perror("open:");
 	int n=0,nbytes=0;
+  //packet pointer
+  packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
+	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
+  packet->seq_num=0,pkt->seq=1;
+  uint8_t seq=1,count=0;
+  packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
 	while(1){
-    bzero(buf,sizeof(buf));
-		nbytes = recvfrom(sock, buf,sizeof(buf), 0, (struct sockaddr*)&sin1, &remote_length);
-		//printf("bytes %d\n",nbytes);
-		n=fwrite(buf,sizeof(char),nbytes,fp);
-		printf("write bytes %d\n",n);
-		if(n<MAXBUFSIZE)
-    {
-      fclose(fp);
-	     break;
-    }
+          nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&sin1, &remote_length);
+          printf("nbytes %d\n",nbytes);
+          if(nbytes < 1024 ){
+              count=1;
+              printf("Hello count %d\n", count);
+          }
 
+          if((nbytes-4)==MAXBUFSIZE || count==1){
+            printf("kkk\n");
+            pkt->seq=packet->seq_num;
+            pkt->ack=packet->ack+1;
+            sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
+            if(seq<packet->seq_num)
+              n=fwrite(pkt1->buff,sizeof(char),MAXBUFSIZE,fp);
+
+            printf("write %d \n",n);
+            seq=packet->seq_num;
+            memcpy(pkt1,packet,sizeof(packet_t));
+          }
+          if((nbytes-4)<MAXBUFSIZE){
+              n=fwrite(pkt1->buff,sizeof(char),nbytes-4,fp);
+              printf("write %d \n",n);
+              //add break : if last packet ack change
+              fclose(fp);
+              break;
+          }
 	}
 }
 
+
+
+
+
+
 void send_file_server(){
-  char file[20],buff[MAXBUFSIZE];
-	if(recvfrom(sock, file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length)<0)
-			perror("recv:\n");
-
-  printf("Filename Rec: %s\n",file);
-
-  FILE *fp;
-  char filename[100]="/home/gautham/Network Systems/P_1/udp/";
-  strcat(filename,file);
-  int n,nbytes;
-  printf("Filename Rec: %s\n",filename);
-
-  fp=fopen(filename,"r");
-  if(fp==NULL)
-    perror("fopen:\n");
-  while(1){
-    n=fread(buff,sizeof(char),MAXBUFSIZE,fp);
-    printf("server reading Packet: %d \n",n);
-
-    if(n==MAXBUFSIZE){
-    nbytes=sendto(sock,buff,MAXBUFSIZE,0,(struct sockaddr *)&sin1, sizeof(remote));
-    printf("server Sending Packet: %d \n",nbytes);
-    }
-
-    else if(n<MAXBUFSIZE){
-      printf("Sending Last Packet \n");
-      if(nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&sin1, sizeof(remote))<0)
-        perror("sendto:");
-    break;
-    }
-  }
+  // char file[20],buff[MAXBUFSIZE];
+	// if(recvfrom(sock, file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length)<0)
+	// 		perror("recv:\n");
+  //
+  // printf("Filename Rec: %s\n",file);
+  //
+  // FILE *fp;
+  // char filename[100]="/home/gautham/Network Systems/P_1/udp/";
+  // strcat(filename,file);
+  // int n,nbytes;
+  // printf("Filename Rec: %s\n",filename);
+  //
+  // fp=fopen(filename,"r");
+  // if(fp==NULL)
+  //   perror("fopen:\n");
+  // while(1){
+  //   n=fread(buff,sizeof(char),MAXBUFSIZE,fp);
+  //   printf("server reading Packet: %d \n",n);
+  //
+  //   if(n==MAXBUFSIZE){
+  //   nbytes=sendto(sock,buff,MAXBUFSIZE,0,(struct sockaddr *)&sin1, sizeof(remote));
+  //   printf("server Sending Packet: %d \n",nbytes);
+  //   }
+  //
+  //   else if(n<MAXBUFSIZE){
+  //     printf("Sending Last Packet \n");
+  //     if(nbytes=sendto(sock, buff,n,0, (struct sockaddr *)&sin1, sizeof(remote))<0)
+  //       perror("sendto:");
+  //       fclose(fp);
+  //       break;
+  //   }
+  // }
 
 
 }
@@ -86,7 +125,6 @@ void send_file_server(){
 int main (int argc, char * argv[] )
 {
 	int nbytes;                        //number of bytes we receive in our message
-	char buffer[MAXBUFSIZE];             //a buffer to store our received message
 	if (argc != 2)
 	{
 		printf ("USAGE:  <port>\n");
@@ -104,8 +142,6 @@ int main (int argc, char * argv[] )
 		printf("unable to bind socket\n");
 
 	remote_length = sizeof(remote);
-	bzero(buffer,sizeof(buffer));
-
 	int option;
  //client put file to server
  while(1){
@@ -113,8 +149,6 @@ int main (int argc, char * argv[] )
  	if(option==1){
  		// store file into server
  		put_in_server();
-    //final ack
-  sendto(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1,remote_length);
  	}
    else if(option==2){
      send_file_server();
