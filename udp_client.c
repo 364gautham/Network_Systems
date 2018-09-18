@@ -57,59 +57,52 @@ void put_file(char* file)
 	fp=fopen(filename,"r");
 	if(fp==NULL)
 		perror("fopen:\n");
+
+	//seek file size
+	fseek(fp,0L,SEEK_END);
+	int siz = ftell(fp);
+	fseek(fp,0L,SEEK_SET);
+	printf("file size %d \n",siz);
  	int option =1;
-	if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
-			perror("send to:\n");
-	if(sendto(sock, file,sizeof(file),0, (struct sockaddr *)&remote, sizeof(remote))<0)
-			perror("send to:\n");
+ 	char ready[10];
+
+		if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+				perror("send to:\n");
+		if(sendto(sock,file,sizeof(file),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+				perror("send to:\n");
+	  if(sendto(sock, &siz,sizeof(siz),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+				perror("send to:\n");
+		recvfrom(sock,ready,sizeof(ready), 0, (struct sockaddr *)&remote, &remote_length);
+		printf("ready %s\n",ready);
+		if(strcmp(ready,"ready") != 0)
+			return;
 
   //packet pointer
 	packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
 	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
 	uint16_t num=1,ack=0;
 
-	while(1){
-		bzero(packet->buff,sizeof(packet->buff));
+	while(siz>0){
+
 		n=fread(packet->buff,sizeof(char),MAXBUFSIZE,fp);
 	  printf("Client reading Packet: %d \n",n);
-		printf("num %d\n",num);
-		if(n==MAXBUFSIZE){
-			packet->seq_num=num;
-			packet->ack=1;
-			ack=1;
-			while(ack<=1){
-					nbytes=sendto(sock, packet,sizeof(packet_t),0,(struct sockaddr *)&remote, sizeof(remote));
+		packet->seq_num=num;
+		packet->ack=1;
+		ack=1;
+		while(ack<=1){
+					nbytes=sendto(sock, packet,n+4,0,(struct sockaddr *)&remote, sizeof(remote));
 					printf("Client Sending Packet: %d \n",nbytes);
 					//wait for ack
+					printf("wait ack\n");
+
 					nbytes=recvfrom(sock,pkt,sizeof(ack_pk_t), 0, (struct sockaddr *)&remote, &remote_length);
 					ack=pkt->ack;
 					printf("ack%d\n",ack);
-				//	if(pkt->seq==(num) && pkt->ack==(num+1))
-						//break;
-			}
-		}
-// TO Check : last packet ack receive
-		else if(n<MAXBUFSIZE){
-			printf("Sending Last Packet \n");
-			packet->seq_num=num;
-			packet->ack=1;
-			ack=1;
-			printf("seq %d",packet->seq_num);
-			while(ack<=1){
-					nbytes=sendto(sock,packet,n+4,0,(struct sockaddr *)&remote, sizeof(remote));
-					printf("Client Sending Packet: %d \n",nbytes);
-					//wait for ack
-					nbytes=recvfrom(sock,pkt,sizeof(ack_pk_t), 0, (struct sockaddr *)&remote, &remote_length);
-					ack=pkt->ack;
-					//if(pkt->seq==(num) && pkt->ack==(num+1))
-						//break;
-			}
-			fclose(fp);
-			break;
 		}
 		num++;
-
+		siz=siz-n;
 	}
+	fclose(fp);
 }
 
 void get_file(char *file){
@@ -161,7 +154,13 @@ int main (int argc, char * argv[])
 	if ((sock = socket(PF_INET,SOCK_DGRAM,0)) < 0)
 		printf("unable to create socket");
 	int on=1;
-	setsockopt(sock,SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+	struct timeval timeout;
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 500000;
+	//setsockopt(sock,SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
+			perror("setsockopt failed : \n");
+
  // get option from user
   char file_name[40];char file[20];
 	memset(file_name, '\0', sizeof(file_name));
