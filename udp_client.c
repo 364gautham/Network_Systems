@@ -37,18 +37,22 @@ typedef struct ack{
 
 int opt(){
 		printf("\n\n****Enter Options as given below***\n");
-		printf("1: put 'Filename' \n2: get 'Filename' \n3: ls \n4:delete 'Filename' \n5:exit\n");
-
+		printf("1: put 'Filename' \n2: get 'Filename' \n3: ls \n4:delete 'Filename' \n5:exit\n\n");
+		memset(inp,0,30);
+		char inp1[30];
+		memset(inp1,0,30);
 		fgets(inp,30,stdin);
-    if(inp[0]=='g'|| inp[0]=='G')
-			return 2;
-		if(inp[0]=='p'|| inp[0]=='P')
+		sscanf(inp,"%s",inp1);
+
+		if(strcmp(inp1,"put")==0)
 			return 1;
-		if(inp[0]=='l'|| inp[0]=='L')
+    if(strcmp(inp1,"get")==0)
+			return 2;
+		if(strcmp(inp1,"ls")==0)
 			return 3;
-		if(inp[0]=='d'|| inp[0]=='D')
+		if(strcmp(inp1,"delete")==0)
 			return 4;
-		if(inp[0]=='e'|| inp[0]=='E')
+		if(strcmp(inp1,"exit")==0)
 			return 5;
 		return 0;
 }
@@ -56,10 +60,8 @@ int opt(){
 void put_file(char* file)
 {
 	FILE *fp;
-	char filename[100]="/home/gautham/Network Systems/P_1/udp/";
-	strcat(filename,file);
 	int n,nbytes;
-	fp=fopen(filename,"r");
+	fp=fopen(file,"r");
 	if(fp==NULL)
 		perror("fopen:\n");
 
@@ -79,8 +81,9 @@ void put_file(char* file)
 				perror("send to:\n");
 		recvfrom(sock,ready,sizeof(ready), 0, (struct sockaddr *)&remote, &remote_length);
 		printf("ready %s\n",ready);
-	//	if(strcmp(ready,"ready") != 0)
-		//	return;
+		if(strcmp(ready,"ready") != 0)
+			return;
+		memset(ready,0,10);
 
   //packet pointer
 	packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
@@ -115,6 +118,7 @@ void put_file(char* file)
 
 	}
 	fclose(fp);
+	free(pkt);free(packet);
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
 	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
@@ -123,58 +127,74 @@ void put_file(char* file)
 
 
 
-void get_file11(char* file){
+void get_file1(char* file){
 	int siz;
 	recvfrom(sock,&siz,sizeof(siz), 0, (struct sockaddr *)&remote, &remote_length);
 
 	char ready[10];
+	memset(ready,0,10);
 	recvfrom(sock,ready,sizeof(ready), 0, (struct sockaddr *)&remote, &remote_length);
 	if(strcmp(ready,"ready") != 0)
 		return;
-	char filename[100]="~";
-	strcat(filename,file);
+	printf("\nReady \n\n");
+
 	FILE *fp;
-	fp=fopen(filename,"w+");
+	fp=fopen(file,"w+");
 	if(fp==NULL)
 		perror("open:");
 
-	int n=0,nbytes=0,nbyts=1200;
+		int n=0,nbytes=0;
 	  //packet pointer
 	  packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
 		ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
-	  packet->seq_num=0,pkt->seq=1;
-	  uint8_t seq=1,count=0;
+	  packet->seq_num=0,pkt->seq=1;packet->ack=0;
+	  //change seq
+	  uint16_t seq=0,count=0;
 	  packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
-
+	  int i=0;int er;
+	  timeout.tv_sec = 0;
+	  timeout.tv_usec = 500000;
+	  if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0)
+	      perror("setsockopt failed : \n");
+	  int rc_seq;
 		while(siz>0){
+	          packet->ack=0;
 	          nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&remote, &remote_length);
-	          printf("nbytes %d\n",nbytes);
-	          if(nbyts<1028 && nbyts >0 && nbytes==-1)
-	          {
-	            n=fwrite(pkt1->buff,sizeof(char),nbyts-4,fp);
-	            printf("write break %d \n",n);
-	            printf("siz %d",siz);
-	            fclose(fp);
-	            break;
+	          //printf("nbytes %d\n",nbytes);
+	          if(errno==EAGAIN){
+	            printf("Receive drop %d\n",packet->seq_num);
+	            //printf("Ack %d\n",packet->ack);
 	          }
-	          nbyts=nbytes;
-	          if(seq==packet->seq_num)
-	              printf("drop drop drop drop drop drop \n");
+	          errno=0;
+	          if(seq<packet->seq_num){
+	          n=fwrite(packet->buff,sizeof(char),nbytes-4,fp);
+	          //printf("write bytes: %d and seq_num %d \n",n,packet->seq_num);
+	          siz=siz-n;
 	          pkt->seq=packet->seq_num;
 	          pkt->ack=packet->ack+1;
 	          sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&remote, sizeof(remote));
-	          if(seq<packet->seq_num){
-	            n=fwrite(pkt1->buff,sizeof(char),MAXBUFSIZE,fp);
-	            printf("write %d \n",n);
-	            siz=siz-n;
+	          rc_seq=packet->seq_num;
+	          }
+
+	          else if (seq==packet->seq_num){
+	            //printf("drop  %d\n",packet->seq_num);
+	            pkt->seq=packet->seq_num+1;
+	            pkt->ack=0;
+	            sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&remote, sizeof(remote));
 	          }
 	          seq=packet->seq_num;
-	          memcpy(pkt1,packet,sizeof(packet_t));
 	  }
+	  printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
+	  fclose(fp);
+	  free(packet);free(pkt);free(pkt1);
+	  timeout.tv_sec = 0;
+	  timeout.tv_usec = 0;
+	  if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0)
+	      perror("setsockopt failed : \n");
 }
 
 void get_file(char *file){
-	int option =2;
+	int option=2;
  	if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
 		 perror("send to:\n");
    // sending filename to server to fetch the file
@@ -182,7 +202,7 @@ void get_file(char *file){
  			perror("send to:\n");
 	printf("Filename : %s\n",file);
 
-	get_file11(file);
+	get_file1(file);
 }
 
 void list_files()
@@ -192,10 +212,22 @@ void list_files()
 		 perror("send to:\n");
 
   char filename[]="ls_server";
-	get_file11(filename);
+	get_file1(filename);
   // print contents of file
-
+ char c;
+ FILE *fp;
+ fp=fopen(filename,"r");
+ if(fp==NULL)
+ 		perror("fopen: \n");
+ c=fgetc(fp);
+ while (c != EOF){
+  printf ("%c", c);
+  c = fgetc(fp);
+	}
+  fclose(fp);
+		remove(filename);
 }
+
 void delete_file(char* file)
 {
 	int option=4,n;
@@ -206,10 +238,10 @@ void delete_file(char* file)
 	printf("n %d \n",n);
 	// get confirmation
 	char ack[10];
+	memset(ack,0,10);
 	recvfrom(sock,ack,sizeof(ack), 0, (struct sockaddr *)&remote, &remote_length);
 	if(strcmp(ack,"Success") == 0)
 		printf("Success Deletion\n" );
-
 }
 void exit_operation()
 {
@@ -271,6 +303,12 @@ int main (int argc, char * argv[])
 				sscanf(file_name,"%s %s",file,file);
 				// get file from server
 				exit_operation();
+			}
+			else{
+				if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
+					 perror("send to:\n");
+				printf("\n***Invalid Command***\n");
+				//recvfrom(sock,&option,sizeof(option), 0, (struct sockaddr*)&remote, &remote_length);
 			}
 		}
 	close(sock);
