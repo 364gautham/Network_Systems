@@ -77,8 +77,8 @@ void put_file(char* file)
 				perror("send to:\n");
 		recvfrom(sock,ready,sizeof(ready), 0, (struct sockaddr *)&remote, &remote_length);
 		printf("ready %s\n",ready);
-		if(strcmp(ready,"ready") != 0)
-			return;
+	//	if(strcmp(ready,"ready") != 0)
+		//	return;
 
   //packet pointer
 	packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
@@ -93,7 +93,7 @@ void put_file(char* file)
 		packet->ack=1;
 		ack=1;
 		while(ack<=1){
-					pkt->ack=0;
+					pkt->ack=0;pkt->seq=0;
 					nbytes=sendto(sock, packet,n+4,0,(struct sockaddr *)&remote, sizeof(remote));
 					printf("Client Sending Packet %d Seq Num:%d \n",nbytes,packet->seq_num);
 					//printf("wait ack\n");

@@ -60,38 +60,70 @@ void put_in_server(){
   //packet pointer
   packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
 	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
-  packet->seq_num=0,pkt->seq=1;
-  uint16_t seq=1,count=0;
+  packet->seq_num=0,pkt->seq=1;packet->ack=0;
+  //change seq
+  uint16_t seq=0,count=0;
   packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
-  int i=0;
+  int i=0;int er;
 	while(siz>0){
+          // nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&sin1, &remote_length);
+          // //printf("nbytes %d\n",nbytes);
+          // er=errno;
+          // if(nbyts<1028 && nbyts >0 && nbytes==-1 )
+          // {
+          //   n=fwrite(pkt1->buff,sizeof(char),nbyts-4,fp);
+          //   printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
+          //   fclose(fp);
+          //   break;
+          // }
+          // nbyts=nbytes;
+          // if(seq==packet->seq_num){
+          //   printf("drop \n");i++;
+          //   //if(i==2)
+          //   //{break;fclose(fp);}
+          // }
+          // pkt->seq=packet->seq_num;
+          // pkt->ack=packet->ack+1;
+          // sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
+          // if(seq<packet->seq_num){
+          //   n=fwrite(pkt1->buff,sizeof(char),MAXBUFSIZE,fp);
+          //   printf("write bytes: %d and seq_num %d \n",n,seq);
+          //   siz=siz-n;
+          // }
+          // seq=packet->seq_num;
+          // if(er!=ETIMEDOUT)
+          // memcpy(pkt1,packet,sizeof(packet_t));
+          packet->ack=0;
           nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&sin1, &remote_length);
           //printf("nbytes %d\n",nbytes);
-          if(nbyts<1028 && nbyts >0 && nbytes==-1 )
+          er=errno;
+          if(nbytes<1028 && nbytes >0)
           {
-            n=fwrite(pkt1->buff,sizeof(char),nbyts-4,fp);
+            n=fwrite(packet->buff,sizeof(char),nbytes-4,fp);
             printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
             fclose(fp);
+            pkt->seq=packet->seq_num;
+            pkt->ack=packet->ack+1;
+            sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
+
             break;
           }
           nbyts=nbytes;
+          if(seq<packet->seq_num){
+          n=fwrite(packet->buff,sizeof(char),MAXBUFSIZE,fp);
+          //printf("write bytes: %d and seq_num %d \n",n,packet->seq_num);
+          siz=siz-n;
+          }
+
           if(seq==packet->seq_num){
             printf("drop \n");i++;
-            //if(i==2)
-            //{break;fclose(fp);}
           }
+          seq=packet->seq_num;
+
           pkt->seq=packet->seq_num;
           pkt->ack=packet->ack+1;
           sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
-          if(seq<packet->seq_num){
-            n=fwrite(pkt1->buff,sizeof(char),MAXBUFSIZE,fp);
-            printf("write bytes: %d and seq_num %d \n",n,seq);
-            siz=siz-n;
-          }
 
-          if(seq!=packet->seq_num)
-          memcpy(pkt1,packet,sizeof(packet_t));
-          seq=packet->seq_num;
   }
   free(packet);free(pkt);free(pkt1);
 }
