@@ -1,4 +1,6 @@
-// TODO : Comments and Documentation of usage
+// TODO : Comments and Documentation of usage , Makefile
+
+
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -32,19 +34,19 @@ typedef struct ack{
 }ack_pk_t;
 
 int opt(){
-		printf("Enter Options as given below\n");
-		printf("1: Put 'Filename' \n2: Get 'Filename' \n3: ls \n4:delete 'Filename' \n5:exit\n");
+		printf("\n\n****Enter Options as given below***\n");
+		printf("1: put 'Filename' \n2: get 'Filename' \n3: ls \n4:delete 'Filename' \n5:exit\n");
 
 		fgets(inp,30,stdin);
-    if(inp[0]=='g')
+    if(inp[0]=='g'|| inp[0]=='G')
 			return 2;
-		if(inp[0]=='p')
+		if(inp[0]=='p'|| inp[0]=='P')
 			return 1;
-		if(inp[0]=='l')
+		if(inp[0]=='l'|| inp[0]=='L')
 			return 3;
-		if(inp[0]=='d')
+		if(inp[0]=='d'|| inp[0]=='D')
 			return 4;
-		if(inp[0]=='e')
+		if(inp[0]=='e'|| inp[0]=='E')
 			return 5;
 		return 0;
 }
@@ -86,22 +88,25 @@ void put_file(char* file)
 	while(siz>0){
 
 		n=fread(packet->buff,sizeof(char),MAXBUFSIZE,fp);
-	  printf("Client reading Packet: %d \n",n);
+	  printf("Client reading Bytes: %d \n",n);
 		packet->seq_num=num;
 		packet->ack=1;
 		ack=1;
 		while(ack<=1){
+					pkt->ack=0;
 					nbytes=sendto(sock, packet,n+4,0,(struct sockaddr *)&remote, sizeof(remote));
-					printf("Client Sending Packet: %d \n",nbytes);
-					//wait for ack
-					printf("wait ack\n");
-
+					printf("Client Sending Packet %d Seq Num:%d \n",nbytes,packet->seq_num);
+					//printf("wait ack\n");
 					nbytes=recvfrom(sock,pkt,sizeof(ack_pk_t), 0, (struct sockaddr *)&remote, &remote_length);
+					//if(nbytes==ETIMEDOUT)
+						//break;
 					ack=pkt->ack;
-					printf("ack%d\n",ack);
+					printf("ack value %d",ack);
+					printf(" for Sequence Number: %d \n",pkt->seq);
 		}
 		num++;
 		siz=siz-n;
+
 	}
 	fclose(fp);
 }

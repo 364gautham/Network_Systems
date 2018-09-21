@@ -37,21 +37,23 @@ void put_in_server(){
 	recvfrom(sock,file,sizeof(file), 0, (struct sockaddr *)&sin1, &remote_length);
   a=recvfrom(sock,&siz,sizeof(siz), 0, (struct sockaddr *)&sin1, &remote_length);
 
-  if(a!=SO_RCVTIMEO)
+  if(a!=SO_RCVTIMEO){
     sendto(sock,ready,sizeof(ready),0,(struct sockaddr *)&sin1, sizeof(remote));
+    printf("Server Sent Ready \n");
+    printf("Filename Recvd:%s\n",file);
+
+  }
   else
   {
     strcpy(ready,"notready");
     sendto(sock,ready,sizeof(ready),0,(struct sockaddr *)&sin1, sizeof(remote));
+    printf("Server Sent Not Ready \n");
+    printf("Exiting \n");
     return;
   }
 
- 	//printf("Filename Recvd: %s\n",file);
-  char filename[10]="~";
-	strcat(filename,file);
-  printf("Filename Recvd: %s\n",filename);
 	FILE *fp;
-	fp=fopen(filename,"w+");
+	fp=fopen(file,"w+");
 	if(fp==NULL)
 		perror("open:");
 	int n=0,nbytes=0,nbyts=1200;
@@ -59,34 +61,39 @@ void put_in_server(){
   packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
 	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
   packet->seq_num=0,pkt->seq=1;
-  uint8_t seq=1,count=0;
+  uint16_t seq=1,count=0;
   packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
-
+  int i=0;
 	while(siz>0){
           nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&sin1, &remote_length);
-          printf("nbytes %d\n",nbytes);
-          if(nbyts<1028 && nbyts >0 && nbytes==-1)
+          //printf("nbytes %d\n",nbytes);
+          if(nbyts<1028 && nbyts >0 && nbytes==-1 )
           {
             n=fwrite(pkt1->buff,sizeof(char),nbyts-4,fp);
-            printf("write break %d \n",n);
-            printf("siz %d",siz);
+            printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
             fclose(fp);
             break;
           }
           nbyts=nbytes;
-          if(seq==packet->seq_num)
-              printf("drop drop drop drop drop drop \n");
+          if(seq==packet->seq_num){
+            printf("drop \n");i++;
+            //if(i==2)
+            //{break;fclose(fp);}
+          }
           pkt->seq=packet->seq_num;
           pkt->ack=packet->ack+1;
           sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
           if(seq<packet->seq_num){
             n=fwrite(pkt1->buff,sizeof(char),MAXBUFSIZE,fp);
-            printf("write %d \n",n);
+            printf("write bytes: %d and seq_num %d \n",n,seq);
             siz=siz-n;
           }
-          seq=packet->seq_num;
+
+          if(seq!=packet->seq_num)
           memcpy(pkt1,packet,sizeof(packet_t));
+          seq=packet->seq_num;
   }
+  free(packet);free(pkt);free(pkt1);
 }
 
 void send_file(char* file)
@@ -209,34 +216,32 @@ int main (int argc, char * argv[] )
 		printf("unable to bind socket\n");
 
 	remote_length = sizeof(remote);
-	int option;int a;
-  ssize_t m;
- //client put file to server
+	int option;
+
   while(1){
-  recvfrom(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1,&remote_length);
- 	if(option==1){
- 		// store file into server
- 		put_in_server();
-    option =0;
- 	}
-  if(option==2){
-     send_file_server();
-       option =0;
-   }
+      recvfrom(sock, &option,sizeof(option), 0, (struct sockaddr *)&sin1,&remote_length);
+      if(option==1){
+     		// store file into server
+     		put_in_server();
+        option=0;
+     	}
+      if(option==2){
+         send_file_server();
+         option=0;
+      }
 
-  if(option==3){
-     list_files();
-     option =0;
-   }
-   if(option==4){
-     delete_file();
-     option =0;
-    }
-    if(option==5){
-      //break;
-      option =0;
-     }
- }
+      if(option==3){
+         list_files();
+         option =0;
+      }
+      if(option==4){
+         delete_file();
+         option =0;
+      }
+      if(option==5){
+          //break;
+          option =0;
+      }
+  }
  close(sock);
-
 }
