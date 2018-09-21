@@ -28,6 +28,8 @@ typedef struct packet{
 	char buff[MAXBUFSIZE];
 }packet_t;
 
+struct timeval timeout;
+
 typedef struct ack{
 	uint16_t seq;
 	uint16_t ack;
@@ -84,6 +86,10 @@ void put_file(char* file)
 	packet_t *packet=(packet_t*)malloc(sizeof(packet_t));
 	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
 	uint16_t num=1,ack=0;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 500000;
+	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
+			perror("setsockopt failed : \n");
 
 	while(siz>0){
 
@@ -109,6 +115,10 @@ void put_file(char* file)
 
 	}
 	fclose(fp);
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
+			perror("setsockopt failed : \n");
 }
 
 
@@ -224,12 +234,8 @@ int main (int argc, char * argv[])
 	if ((sock = socket(PF_INET,SOCK_DGRAM,0)) < 0)
 		printf("unable to create socket");
 	int on=1;
-	struct timeval timeout;
-  timeout.tv_sec = 0;
-  timeout.tv_usec = 500000;
 	setsockopt(sock,SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
-			perror("setsockopt failed : \n");
+
 
  // get option from user
   char file_name[40];char file[20];
