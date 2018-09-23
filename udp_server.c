@@ -62,7 +62,7 @@ void put_in_server(){
 	ack_pk_t *pkt=(ack_pk_t*)malloc(sizeof(ack_pk_t));
   packet->seq_num=0,pkt->seq=1;packet->ack=0;
   //change seq
-  volatile uint16_t seq=0,count=0;
+  volatile uint16_t seq=0;
   packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
   int i=0;int er;
   timeout.tv_sec = 0;
@@ -70,12 +70,12 @@ void put_in_server(){
   if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0)
       perror("setsockopt failed : \n");
 	while(siz>0){
-          packet->ack=0;
+          pkt->ack=0;
           nbytes=recvfrom(sock,packet,sizeof(packet_t), 0, (struct sockaddr*)&sin1, &remote_length);
           if(errno==EAGAIN){
-            printf("Receive drop %d\n",packet->seq_num);
+            printf("Receive drop %d nbytes %d\n",packet->seq_num,nbytes);
           }
-          errno=0;
+
           if(seq<packet->seq_num){
           n=fwrite(packet->buff,sizeof(char),nbytes-4,fp);
           //printf("write bytes: %d and seq_num %d \n",n,packet->seq_num);
@@ -84,13 +84,13 @@ void put_in_server(){
           pkt->ack=packet->ack+1;
           sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
           }
-          else if ((nbytes<1) && (seq==packet->seq_num)){
-            //printf("drop  %d\n",packet->seq_num);
-            pkt->seq=packet->seq_num;
-            pkt->ack=0;
-            sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
+          if(errno!=EAGAIN && seq==packet->seq_num){
+                printf("ack drop  %d oo %d \n",packet->seq_num,nbytes);
+                pkt->seq=packet->seq_num;
+                pkt->ack=2;
+                sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&sin1, sizeof(remote));
           }
-
+          errno=0;
           seq=packet->seq_num;
   }
   printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
@@ -134,9 +134,7 @@ void send_file(char* file)
   	timeout.tv_usec = 500000;
   	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO , (char *)&timeout,sizeof(timeout)) < 0)
   			perror("setsockopt failed : \n");
-    int cnt=0;
   	while(siz>0){
-      cnt=0;
   		n=fread(packet->buff,sizeof(char),MAXBUFSIZE,fp);
   	  printf("Server reading Bytes: %d \n",n);
   		packet->seq_num=num;
@@ -146,13 +144,10 @@ void send_file(char* file)
   					pkt->ack=0;pkt->seq=0;
   					nbytes=sendto(sock, packet,n+4,0,(struct sockaddr *)&sin1, sizeof(remote));
   					printf("Server Sending Packet %d Seq Num:%d \n",nbytes,packet->seq_num);
-  					//printf("wait ack\n");
   					nbytes=recvfrom(sock,pkt,sizeof(ack_pk_t), 0, (struct sockaddr *)&sin1, &remote_length);
   					ack=pkt->ack;
   					printf("ack value %d",ack);
   					printf(" for Sequence Number: %d \n",pkt->seq);
-            cnt++;
-            if(cnt==3)break;
   		}
   		num++;
   		siz=siz-n;

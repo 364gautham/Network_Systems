@@ -1,5 +1,15 @@
 // TODO : Comments and Documentation of usage , Makefile
-
+/********************************************************************************************************
+*
+* UNIVERSITY OF COLORADO BOULDER
+*
+* @file UDP_CLIENT.c
+* @brief udp CLIENT process which does socket udp communication
+*
+* @author  Gautham K A
+* @date  9/21/2018
+*
+********************************************************************************************************/
 
 
 #include <sys/socket.h>
@@ -21,7 +31,7 @@ char inp[30];
 int sock;                               //this will be our socket
 struct sockaddr_in remote;              //"Internet socket address structure"
 int remote_length;
-//packet structure
+//packet structure for data transfer
 typedef struct packet{
 	uint16_t seq_num;
 	uint16_t ack;
@@ -29,11 +39,16 @@ typedef struct packet{
 }packet_t;
 
 struct timeval timeout;
-
+//packet structure for ack transfer
 typedef struct ack{
 	uint16_t seq;
 	uint16_t ack;
 }ack_pk_t;
+
+/********************************************************************************************************
+*Function to get options to perform necesaary actions like get file,
+* put file, list files , delete files and exit server process
+********************************************************************************************************/
 
 int opt(){
 		printf("\n\n****Enter Options as given below***\n");
@@ -56,7 +71,10 @@ int opt(){
 			return 5;
 		return 0;
 }
-// put file to server function
+/********************************************************************************************************
+*this function needs filename as input and does put the file through
+* udp socket using specified address and given port(command line - run time)t
+********************************************************************************************************/
 void put_file(char* file)
 {
 	FILE *fp;
@@ -110,8 +128,6 @@ void put_file(char* file)
 					ack=pkt->ack;
 					printf("ack value %d",ack);
 					printf(" for Sequence Number: %d \n",pkt->seq);
-					count++;
-					if(count==3)break;
 		}
 		num++;
 		siz=siz-n;
@@ -124,8 +140,10 @@ void put_file(char* file)
 			perror("setsockopt failed : \n");
 }
 
-
-
+/********************************************************************************************************
+*this function needs filename as input gets that file from server directory through
+* udp socket using specified address and given port(command line - run time)
+********************************************************************************************************/
 void get_file1(char* file){
 	int siz;
 	recvfrom(sock,&siz,sizeof(siz), 0, (struct sockaddr *)&remote, &remote_length);
@@ -135,8 +153,8 @@ void get_file1(char* file){
 	char ready[10];
 	memset(ready,0,10);
 	recvfrom(sock,ready,sizeof(ready), 0, (struct sockaddr *)&remote, &remote_length);
-	if(strcmp(ready,"ready") != 0)
-		return;
+	//if(strcmp(ready,"ready") != 0)
+		//return;
 	printf("\nReady \n\n");
 
 	FILE *fp;
@@ -152,7 +170,7 @@ void get_file1(char* file){
 		//change seq
 		volatile uint16_t seq=0,count=0;
 		packet_t *pkt1=(packet_t*)malloc(sizeof(packet_t));
-		int i=0;int er;
+		int i=0;
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 500000;
 		if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0)
@@ -164,7 +182,6 @@ void get_file1(char* file){
 							printf("Receive drop %d\n",packet->seq_num);
 							//printf("Ack %d\n",packet->ack);
 						}
-						errno=0;
 						if(seq<packet->seq_num){
 						n=fwrite(packet->buff,sizeof(char),nbytes-4,fp);
 						//printf("write bytes: %d and seq_num %d \n",n,packet->seq_num);
@@ -172,16 +189,15 @@ void get_file1(char* file){
 						pkt->seq=packet->seq_num;
 						pkt->ack=packet->ack+1;
 						sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&remote, sizeof(remote));
-						//printf("rc value %d %d\n",rc,packet->seq_num);
 						}
-						else if ((nbytes<1) && (seq==packet->seq_num)){
-							//printf("drop  %d\n",packet->seq_num);
-							pkt->seq=packet->seq_num;
-							pkt->ack=0;
-							sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&remote, sizeof(remote));
-						}
-
-						seq=packet->seq_num;
+						if(errno!=EAGAIN && seq==packet->seq_num){
+	                printf("ack drop  %d oo %d \n",packet->seq_num,nbytes);
+	                pkt->seq=packet->seq_num;
+	                pkt->ack=2;
+	                sendto(sock,pkt,sizeof(ack_pk_t),0,(struct sockaddr *)&remote, sizeof(remote));
+	          }
+	          errno=0;
+	          seq=packet->seq_num;
 
 		}
 		printf("write Last packet data:%d  and seq_num: %d\n",n,seq);
@@ -193,6 +209,9 @@ void get_file1(char* file){
 				perror("setsockopt failed : \n");
 }
 
+/********************************************************************************************************
+*this function needs filename as input and sends that filename to get_file1 to fetch file from server
+********************************************************************************************************/
 void get_file(char *file){
 	int option=2;
  	if(sendto(sock, &option,sizeof(option),0, (struct sockaddr *)&remote, sizeof(remote))<0)
@@ -205,6 +224,9 @@ void get_file(char *file){
 	get_file1(file);
 }
 
+/********************************************************************************************************
+*this function prints put the file list of server directory
+********************************************************************************************************/
 void list_files()
 {
 	int option=3;
@@ -228,6 +250,9 @@ void list_files()
 		remove(filename);
 }
 
+/********************************************************************************************************
+*this function needs filename as input and removes that file if present in server directory
+********************************************************************************************************/
 void delete_file(char* file)
 {
 	int option=4,n;
@@ -243,6 +268,10 @@ void delete_file(char* file)
 	if(strcmp(ack,"Success") == 0)
 		printf("Success Deletion\n" );
 }
+
+/********************************************************************************************************
+*this function performs exit operation of server process.
+********************************************************************************************************/
 void exit_operation()
 {
 	int option=5;
@@ -251,6 +280,9 @@ void exit_operation()
 }
 
 
+/********************************************************************************************************
+* Main function creates the udp socket descriptor
+********************************************************************************************************/
 int main (int argc, char * argv[])
 {
 	if (argc < 3)
