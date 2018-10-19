@@ -18,10 +18,26 @@
 
 #define CONNMAX 1000
 #define BYTES 1024
+int kill_server,server_fd;
 int clients[CONNMAX];
+int slot,conn_aliv;
+
 char root[50]="/home/gautham/Network Systems/p_2/www";
 
+void s_exit(){
+  kill_server=1;
+  close(server_fd);
+  exit(0);
+}
+void alive_exit(){
+  printf("Timeout\n");
+  shutdown(clients[slot],SHUT_RDWR);
+  close(clients[slot]);
+  clients[slot]=-1;
+  conn_aliv=0;
+  exit(0);
 
+}
 void reverse(char s[])
  {
      int i, j;char c;
@@ -47,7 +63,6 @@ void file_size(char *file,char *str){
       }while ((size /= 10) > 0);
      str[i] = '\0';
      reverse(str);
-
 }
 
 char* content_type(char *file_n){
@@ -78,16 +93,22 @@ void connection_handler(int slot){
    char *method=malloc(10);
    char *cont_s = malloc(50);
    char *cont_ty = malloc(50);
-
+   char *alive = malloc(30);
+   conn_aliv=1;
+while(conn_aliv){
+  conn_aliv=0;
   memset((void*)buffer,10240,0);
-  rcvd=recv(clients[slot],buffer,1024,0);
+  memset((void*)alive,30,0);
+
+  rcvd=recv(clients[slot],buffer,10240,0);
 
   if(rcvd<0)
       printf("Receive error from client\n");
   else if(rcvd==0)
       printf("Client Disconnected unexpectedly\n");
   else{
-              //printf("%s\n",buffer );
+              printf("%s\n",buffer );
+              strcpy(buf,buffer);
 
               //strcpy(buf,buffer);
               method = strtok (buffer, " \t\n");
@@ -99,22 +120,21 @@ void connection_handler(int slot){
                       if ( strncmp( version, "HTTP/1.0", 8)!=0 && strncmp( version, "HTTP/1.1", 8)!=0 )
                       {
                         printf("bad request\n");
-                        write(clients[slot], "HTTP/1.0 400 Bad Request\n", 25);
+                        write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 25);
                       }
                       else
                       {
+
                         if ( strncmp(file, "/\0", 2)==0 )
                           file = "/index.html";        //Because if no file is specified, index.html will be opened by default
-
+                        printf("%s\n",file);
                         strcpy(path, root);
                         strcpy(&path[strlen(root)], file);
                         //printf("file: %s\n", path);
-
                         cont_ty=content_type(path);
-
-
                         if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
                         {
+
                           file_size(path,str);
                           strcpy(header,version);
                           strcat(header," 200 OK\r\n");
@@ -123,22 +143,40 @@ void connection_handler(int slot){
                           strcat(header,"\r\n");
                           strcat(header,"Content-Length: ");
                           strcat(header,str);
+                          if(strncmp(alive,"Connection: keep-alive",22)==0){
+                            strcat(header,"\r\n");
+                            strcat(header,"Connection: Keep-alive");
+                          }
+                          else{
+                            strcat(header,"\r\n");
+                            strcat(header,"Connection: close");
+                          }
                           strcat(header,"\r\n\r\n");
-                          //printf("%s",header);
+                          printf("%s",header);
                           if(send(clients[slot],header,strlen(header),0) == -1) {
                               printf("failed to send\n");
                           }
 
                           while ( (n=read(fd, data, BYTES))>0 )
                             write (clients[slot], data, n);
-                        }
-                        else   {
+                         }
+                         else   {
                           printf("file not found \n");
-                          write(clients[slot], "HTTP/1.0 404 Not Found\n", 23); //FILE NOT FOUND
+                          write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 23); //FILE NOT FOUND
                         }
                       }
-                      // alarm for keepalive
               }
+              else{
+                printf("bad request\n");
+                write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 25);
+              }
+
+              if(strstr(buf,"Connection: keep-alive")!=NULL){
+                printf("Timer Started for 10 seconds\n");
+                conn_aliv=1;
+                alarm(10);
+              }
+   }
 
   }
   shutdown(clients[slot],SHUT_RDWR);
@@ -148,17 +186,18 @@ void connection_handler(int slot){
 
 int main(int argc, char const *argv[])
 {
-    int server_fd, new_socket, valread;
+    int new_socket, valread;
     struct sockaddr_in address;
     int opt = 1;
-    int slot=0;
-    int addrlen = sizeof(address);
 
+    int addrlen = sizeof(address);
+    signal(SIGINT, s_exit);
+    signal(SIGALRM, alive_exit);
+    slot=0;
     if (argc < 2){
 		    printf("USAGE: <server_port>\n");
 		    exit(1);
 	  }
-
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)   {
         perror("socket failed");
@@ -186,20 +225,22 @@ int main(int argc, char const *argv[])
         perror("listen");
         exit(1);
     }
-
-    while(1){
+    kill_server=0;
+    while(!kill_server){
         if ((clients[slot] = accept(server_fd, (struct sockaddr *)&address,(socklen_t*)&addrlen))<0){
             perror("accept");
             //exit(1);
         }
+
         else {
+          printf("Val %d\n",clients[slot]);
           if(fork()==0){
             connection_handler(slot);
-            exit(0);
+            exit(1);
+          }else{
+            while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
           }
         }
-
-        while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
 
     }
     close(server_fd);
