@@ -80,13 +80,58 @@ char* content_type(char *file_n){
   if (strcmp(ext, "ico") == 0) { return "image/x-icon"; }
 }
 
+void bad_version(char *header,char* version,int slot){
+  strcpy(header,version);
+  strcat(header," 500 Internal Server Error\r\n");
+  strcat(header,"Content-Type: Invalid");
+  strcat(header,"\r\n");
+  strcat(header,"Content-Length: Invalid");
+  strcat(header,"\r\n\r\n");
+  printf("%s",header);
+  if(send(clients[slot],header,strlen(header),0) == -1) {
+      printf("failed to send\n");
+  }
+ char * err = malloc(500);
+  strcpy(err,"<HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>\n");
+  strcat(err,"<html><BODY>500 Internal Server Error: Invalid HTTP Version:");
+  strcat(err,version);
+  strcat(err,"\r\n");
+  strcat(err,"</BODY></html>");
+  if(send(clients[slot],err,strlen(err),0) == -1) {
+      printf("failed to send\n");
+  }
+
+}
+
+void bad_file(char *header,char* version,int slot){
+  strcpy(header,version);
+  strcat(header," 500 Internal Server Error\r\n");
+  strcat(header,"Content-Type: Invalid");
+  strcat(header,"\r\n");
+  strcat(header,"Content-Length: Invalid");
+  strcat(header,"\r\n\r\n");
+  printf("%s",header);
+  if(send(clients[slot],header,strlen(header),0) == -1) {
+      printf("failed to send\n");
+  }
+ char * err = malloc(500);
+  strcpy(err,"<HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>\n");
+  strcat(err,"<html><BODY>500 Internal Server Error: File not found:");
+  strcat(err,"\r\n");
+  strcat(err,"</BODY></html>");
+  if(send(clients[slot],err,strlen(err),0) == -1) {
+      printf("failed to send\n");
+  }
+
+}
+
 void connection_handler(int slot){
-   char header[10000],data[1024];
-   int cont_len, n=0,size,fd, rcvd;;
+   char data[1024];
+   int cont_len, n=0,size,fd, rcvd;
    char a[20],str[20];
    char buf[1000],path[1000];
    char buffer[10240] = {0};
-
+   char *header = malloc(10000);
    char * token;
    char *file=malloc(40);
    char *version=malloc(10);
@@ -94,11 +139,18 @@ void connection_handler(int slot){
    char *cont_s = malloc(50);
    char *cont_ty = malloc(50);
    char *alive = malloc(30);
+   char *error =malloc(2000);
+   char *post =malloc(2000);
+   char buf_p[500];
    conn_aliv=1;
+   int exit_al =1;
 while(conn_aliv){
-  conn_aliv=0;
+  conn_aliv=0;exit_al=1;
   memset((void*)buffer,10240,0);
-  memset((void*)alive,30,0);
+  memset((void*)buf,1000,0);
+  memset((void*)header,10000,0);
+
+
 
   rcvd=recv(clients[slot],buffer,10240,0);
 
@@ -114,65 +166,142 @@ while(conn_aliv){
               method = strtok (buffer, " \t\n");
               if ( strncmp(method, "GET\0", 4)==0 ){
 
-                       file = strtok (NULL, " \t");
-                       version = strtok (NULL, " \t\r\n");
+                      file = strtok (NULL, " \t");
+                      version = strtok (NULL, " \t\r\n");
                        //printf("version %s",version);
                       if ( strncmp( version, "HTTP/1.0", 8)!=0 && strncmp( version, "HTTP/1.1", 8)!=0 )
                       {
-                        printf("bad request\n");
-                        write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 25);
+                        printf("bad request version \n");exit_al=0;
+                        bad_version(header,version,slot);
                       }
                       else
                       {
 
-                        if ( strncmp(file, "/\0", 2)==0 )
-                          file = "/index.html";        //Because if no file is specified, index.html will be opened by default
-                        printf("%s\n",file);
-                        strcpy(path, root);
-                        strcpy(&path[strlen(root)], file);
-                        //printf("file: %s\n", path);
-                        cont_ty=content_type(path);
-                        if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
-                        {
+                            if ( strncmp(file, "/\0", 2)==0 )
+                              file = "/index.html";        //Because if no file is specified, index.html will be opened by default
+                            printf("%s\n",file);
+                            strcpy(path, root);
+                            strcpy(&path[strlen(root)], file);
+                            //printf("file: %s\n", path);
+                            cont_ty=content_type(path);
+                            if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
+                            {
+                                    file_size(path,str);
+                                    strcpy(header,version);
+                                    strcat(header," 200 OK\r\n");
+                                    strcat(header,"Content-Type: ");
+                                    strcat(header,cont_ty);
+                                    strcat(header,"\r\n");
+                                    strcat(header,"Content-Length: ");
+                                    strcat(header,str);
+                                    if(strstr(buf,"keep-alive")!=NULL){
+                                      strcat(header,"\r\n");
+                                      strcat(header,"Connection: Keep-alive");
+                                    }
+                                    else{
+                                      strcat(header,"\r\n");exit_al=0;
+                                      strcat(header,"Connection: close");
+                                    }
+                                    strcat(header,"\r\n\r\n");
+                                    printf("%s",header);
+                                    if(send(clients[slot],header,strlen(header),0) == -1) {
+                                        printf("failed to send\n");exit_al=0;
+                                    }
 
-                          file_size(path,str);
-                          strcpy(header,version);
-                          strcat(header," 200 OK\r\n");
-                          strcat(header,"Content-Type: ");
-                          strcat(header,cont_ty);
-                          strcat(header,"\r\n");
-                          strcat(header,"Content-Length: ");
-                          strcat(header,str);
-                          if(strncmp(alive,"Connection: keep-alive",22)==0){
-                            strcat(header,"\r\n");
-                            strcat(header,"Connection: Keep-alive");
-                          }
-                          else{
-                            strcat(header,"\r\n");
-                            strcat(header,"Connection: close");
-                          }
-                          strcat(header,"\r\n\r\n");
-                          printf("%s",header);
-                          if(send(clients[slot],header,strlen(header),0) == -1) {
-                              printf("failed to send\n");
-                          }
+                                    while ( (n=read(fd, data, BYTES))>0 )
+                                      write (clients[slot], data, n);
+                             }
 
-                          while ( (n=read(fd, data, BYTES))>0 )
-                            write (clients[slot], data, n);
-                         }
-                         else   {
-                          printf("file not found \n");
-                          write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 23); //FILE NOT FOUND
-                        }
+                             else{
+                              printf("file not found \n");exit_al=0;
+                              bad_file(header,version,slot);
+                            }
                       }
               }
-              else{
-                printf("bad request\n");
-                write(clients[slot], "HTTP/1.1 500 Internal Server Error\n", 25);
+              else if (strncmp(method, "POST\0", 5)==0){
+
+                file = strtok (NULL, " \t");
+                version = strtok (NULL, " \t\r\n");
+                //printf("version %s",version);
+                if ( strncmp( version, "HTTP/1.0", 8)!=0 && strncmp( version, "HTTP/1.1", 8)!=0 )
+                {
+                  printf("bad request version \n");exit_al=0;
+                  bad_version(header,version,slot);
+                }
+                else
+                {
+                      if ( strncmp(file, "/\0", 2)==0 )
+                        file = "/index.html";        //Because if no file is specified, index.html will be opened by default
+                      //printf("%s\n",file);
+                      strcpy(path, root);
+                      strcpy(&path[strlen(root)], file);
+                      //printf("file: %s\n", path);
+                      cont_ty=content_type(path);
+                      if ( (fd=open(path, O_RDONLY))!=-1 )    //FILE FOUND
+                      {
+                              file_size(path,str);
+                              strcpy(header,version);
+                              strcat(header," 200 OK\r\n");
+                              strcat(header,"Content-Type: ");
+                              strcat(header,cont_ty);
+                              strcat(header,"\r\n");
+                              strcat(header,"Content-Length: ");
+                              strcat(header,str);
+                              if(strstr(buf,"keep-alive")!=NULL){
+                                strcat(header,"\r\n");
+                                strcat(header,"Connection: Keep-alive");
+                              }
+                              else{
+                                strcat(header,"\r\n");exit_al=0;
+                                strcat(header,"Connection: close");
+                              }
+                              //printf("%s",header);
+                              strcat(header,"\r\n");
+                              char *pt_post=strstr(buf,"POSTDATA");
+                              strcpy(buf_p,pt_post);
+                              if(strstr(buf_p,"\n")!=NULL){
+                                strtok (buf_p, " \r\n");
+                                post = strtok (NULL, " \r\n");
+                                strcat(header,"<html><body><pre><h1>POST DATA</h1>");
+                                //strcpy(post,pt_post);
+                                //printf("%s",post);
+                                strcat(header,post);strcat(header,"</pre>");
+
+                              }
+                              else{
+                                strcat(header,"<html><body><pre><h1>POST DATA</h1>");
+                                strcat(header,"</pre>");
+                              }
+
+                              //strcat(header,"\r\n\r\n");
+                              printf("%s",header);
+                              if(send(clients[slot],header,strlen(header),0) == -1) {
+                                  printf("failed to send\n");exit_al=0;
+                              }
+
+                              while ( (n=read(fd, data, BYTES))>0)
+                                write (clients[slot], data, n);
+                            //printf("");
+                       }
+
+                       else{
+                        printf("file not found \n");exit_al=0;
+                        bad_file(header,version,slot);
+                      }
+                }
+
+
+
               }
 
-              if(strstr(buf,"Connection: keep-alive")!=NULL){
-                printf("Timer Started for 10 seconds\n");
+              else{
+                printf("bad request\n");
+                bad_version(header,version,slot);
+              }
+
+              if(strstr(buf,"keep-alive")!=NULL){
+                printf("\nTimer Started for 10 seconds\n");
+                //if(exit_al)
                 conn_aliv=1;
                 alarm(10);
               }
