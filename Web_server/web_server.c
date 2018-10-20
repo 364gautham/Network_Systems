@@ -39,6 +39,7 @@ char root[50]="/home/gautham/Network Systems/p_2/www";
 
 /*signal handler for closing the server when ctrl+c interrupt provvided*/
 void s_exit(){
+  printf("Server Exiting!!\n");
   kill_server=1;
   close(server_fd);
   exit(0);
@@ -47,7 +48,7 @@ void s_exit(){
 /*signal handler to close the client connection after timeout*/
 
 void alive_exit(){
-  printf("Timeout\n");
+  printf("\nTimeout !!\n");
   shutdown(clients[slot],SHUT_RDWR);
   close(clients[slot]);
   clients[slot]=-1;
@@ -180,6 +181,7 @@ while(conn_aliv){
   else if(rcvd==0)
       printf("Client Disconnected unexpectedly\n");
   else{
+              printf("\n Socket descriptor: %d\n",clients[slot]);
               printf("%s\n",buffer );
               strcpy(buf,buffer);
 
@@ -379,7 +381,7 @@ int main(int argc, char const *argv[])
         }
 
         else {
-          printf("Val %d\n",clients[slot]);
+          //printf("Socket descriptor: %d\n",clients[slot]);
           if(fork()==0){
             connection_handler(slot);
             exit(0);
