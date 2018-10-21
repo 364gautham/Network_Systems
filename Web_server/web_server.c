@@ -150,10 +150,8 @@ void bad_file(char *header,char* version,int slot){
 /* function that handles all the clients and provide appropriate responses*/
 
 void connection_handler(int slot){
-   char data[1024];
+   char data[1024],buf[10000],path[1000],a[20],str[20],buf_p[500];
    int cont_len, n=0,size,fd, rcvd;
-   char a[20],str[20];
-   char buf[1000],path[1000];
    char buffer[10240] = {0};
    char *header = malloc(10000);
    char * token;
@@ -165,13 +163,13 @@ void connection_handler(int slot){
    char *alive = malloc(30);
    char *error =malloc(2000);
    char *post =malloc(2000);
-   char buf_p[500];
    conn_aliv=1;
    int exit_al =1;
 while(conn_aliv){
   conn_aliv=0;exit_al=1;
-  memset((void*)buffer,10240,0);
-  memset((void*)buf,1000,0);
+  memset((void*)buffer,10240,0);  memset((void*)data,10240,0);
+
+  memset((void*)buf,10000,0);
   memset((void*)header,10000,0);
 
   rcvd=recv(clients[slot],buffer,10240,0);
