@@ -27,6 +27,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 
 #define CONNMAX 1000
@@ -384,6 +386,7 @@ int main(int argc, char const *argv[])
             connection_handler(slot);
             exit(0);
           }else{
+            waitpid(-1,NULL,WNOHANG);
             while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
           }
         }
