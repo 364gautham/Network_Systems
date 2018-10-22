@@ -280,21 +280,27 @@ while(conn_aliv){
                               }
                               //printf("%s",header);
                               strcat(header,"\r\n");
-                              char *pt_post=strstr(buf,"POSTDATA");
+                              char *pt_post=strstr(buf,"\r\n\r\n");
+                              //pt_post++;pt_post++;pt_post++;pt_post++;
+                              pt_post=pt_post+4;
                               strcpy(buf_p,pt_post);
-                              if(strstr(buf_p,"\n")!=NULL){
-                                strtok (buf_p, " \r\n");
-                                post = strtok (NULL, " \r\n");
-                                strcat(header,"<html><body><pre><h1>POST DATA</h1>");
-                                //strcpy(post,pt_post);
-                                //printf("%s",post);
-                                strcat(header,post);strcat(header,"</pre>");
-
-                              }
-                              else{
-                                strcat(header,"<html><body><pre><h1>POST DATA</h1>");
-                                strcat(header,"</pre>");
-                              }
+                              //printf("%s",buf_p);
+                              // if(strstr(buf_p,"\n")!=NULL){
+                              //   strtok (buf_p, " \r\n");
+                              //   post = strtok (NULL, " \r\n");
+                              //   strcat(header,"<html><body><pre><h1>POST DATA</h1>");
+                              //   //strcpy(post,pt_post);
+                              //   //printf("%s",post);
+                              //   strcat(header,post);strcat(header,"</pre>");
+                              //
+                              // }
+                              // else{
+                              //   strcat(header,"<html><body><pre><h1>POST DATA</h1>");
+                              //   strcat(header,"</pre>");
+                              // }
+                              strcat(header,"<html><body><pre><h1>");
+                              strcat(header,buf_p);
+                              strcat(header,"</h1></pre>");
 
                               //strcat(header,"\r\n\r\n");
                               printf("%s",header);
