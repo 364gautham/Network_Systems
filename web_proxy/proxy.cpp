@@ -4,6 +4,7 @@
 using namespace std;
 extern int h_errno;
 
+int timeout;
 int clients[CONNMAX];
 struct sockaddr_in address;
 int addrlen = sizeof(address);
@@ -185,16 +186,52 @@ int search_f_timeout(char* hash){
     //first check: file existence
     if( access(hash,F_OK) != -1 ) {
       // file exists ,  check timeout
-        return 1;
-
-    } else {
+        cout<< "File Exists\n";
+        //check for timeout
+        char hash_filename[FILENAME_MAX];
+        getcwd(hash_filename, FILENAME_MAX );
+        strcat(hash_filename,"/");
+        strcat(hash_filename,hash);
+        struct stat attr;
+        stat(hash_filename, &attr);
+        char *time_file=new char[100];
+        sprintf(time_file,"%s",ctime(&attr.st_mtime));
+        char* temp = strtok(time_file," ");
+        temp=strtok(NULL," ");
+        temp=strtok(NULL," ");
+        temp=strtok(NULL," ");
+        char* hr= strtok(temp,":");
+        char* min=strtok(NULL,":");
+        char* sec=strtok(NULL,":");
+        int t1=atoi(hr)*3600+atoi(min)*60+atoi(sec);
+        bzero(time_file,sizeof(time_file));
+        // get current time
+        time_t rawtime;
+        struct tm* timeinfo;
+        time(&rawtime);
+        timeinfo = localtime (&rawtime);
+        time_file=asctime(timeinfo);
+        temp = strtok(time_file," ");
+        temp=strtok(NULL," ");
+        temp=strtok(NULL," ");
+        temp=strtok(NULL," ");
+        hr= strtok(temp,":");
+        min=strtok(NULL,":");
+        sec=strtok(NULL,":");
+        int t2=atoi(hr)*3600+atoi(min)*60+atoi(sec);
+        //delete[] time_file;
+        int diff_t=t2-t1;
+        if(diff_t>60)return 0;
+        else return 1;
+    }
+    else{
         // file doesn't exist
         return 0;
     }
 }
 int get_filesize(char* filename){
     // struct stat stat_buf;
-    // int rc = stat(filename.c_str(), &stat_buf);
+    // int rc = stat(filename, &stat_buf);
     // return rc == 0 ? stat_buf.st_size : -1;
     return 1;
 }
@@ -221,19 +258,14 @@ int check_cache(char* path){
     //cout << "Hash"<<hash_key;
     if(search_f_timeout(hash_key)){
       //to send from cache
-      delete[] hash_key;
+      //delete[] hash_key;
       return 1;
     }
     else{
       //store in cache
-        delete[] hash_key;
+        //delete[] hash_key;
         return 0;
     }
-    // struct stat attr;
-    // stat("/home/gautham/Network Systems/p_3/time", &attr);
-    // char time[100];
-    // sprintf(time,"%s",ctime(&attr.st_mtime));
-    // cout<<time<<endl;
 }
 void send_from_cache(int fd,char* path){
     char *hash_key=new char[200];
@@ -261,8 +293,8 @@ void send_from_cache(int fd,char* path){
       }
 
     }
-    delete[] hash_key;
-    delete[] recv_buffer;
+    //delete[] hash_key;
+    //delete[] recv_buffer;
 
 
 
@@ -330,14 +362,15 @@ void request_parse(int fd){
 }
 
 int main(int argc ,char* argv[]){
-      if (argc < 2){
-        cout<<"USAGE: <server_port>\n";
+      if (argc < 3){
+        cout<<"USAGE: <server_port> <timeout for cache>\n";
         exit(1);
       }
       int i;
       for (i=0; i<CONNMAX; i++)
       clients[i]=-1;
       int port=atoi(argv[1]);
+      timeout = atoi(argv[2]);
       int server_fd=create_socket(port);
       cout<<"First : "<<server_fd<<endl;
       int accept_fd=0;
