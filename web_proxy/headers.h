@@ -21,6 +21,8 @@
 #include <time.h>
 #include <fstream>
 #include <stdlib.h>
+#include <signal.h>
+
 
 #define CONNMAX 1000
 #define BYTES 1024
@@ -45,5 +47,7 @@ void request_parse(int fd);
 void send_from_cache(int fd);
 void handle_forbidden(int fd);
 int blocked_list(char* hostname);
-
+int proxy_hostname_to_ip(char* hostname,char* ip_address);
+int search_hostname(char* host,char* ip);
+void s_exit();
 #endif

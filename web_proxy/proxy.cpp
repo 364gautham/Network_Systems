@@ -4,11 +4,21 @@
 using namespace std;
 extern int h_errno;
 
-int timeout;
+int timeout,kill_server,server_fd;
 int clients[CONNMAX];
 struct sockaddr_in address;
 int addrlen = sizeof(address);
-
+void signal_handler(int sig){
+  printf("Server Exiting!!\n");
+  kill_server=1;
+  //removing Hostname file
+  if(remove("hostname")!= 0 )
+    perror( "Error deleting file" );
+  else
+    cout<<"File successfully deleted\n";
+  close(server_fd);
+  exit(0);
+}
 char* md5sum_create(const char* path){
       unsigned char digest[16];
       printf("string length: %lu\n", strlen(path));
@@ -50,18 +60,78 @@ int create_socket(int port){
       }
       return server_fd;
 }
+int search_hostname(char* hostname,char* ip){
+  fstream search_hostname;
+  char buff[2000];
+
+  search_hostname.open("hostname",fstream::in | fstream::binary);
+  if(search_hostname.is_open()){
+      search_hostname.read(buff,2000);
+  }
+  search_hostname.close();
+  char* find;
+  find=strstr(buff,hostname);
+  if(!find){cout<<"Hostname Not Found in Cache\n";return 0;}
+  char ip_temp[100];
+  strcpy(ip_temp,find);
+  find=strtok(ip_temp,"\t");
+  find=strtok(NULL," \r\n");
+  memcpy(ip,find,strlen(find));
+  //cout<<"\nip Address: "<<ip<<endl;
+  return 1;
+}
+int proxy_hostname_to_ip(char* hostname,char* ip_address){
+        struct hostent *he;
+        struct in_addr **addr_list;
+        int i,len;
+
+        if ( (he = gethostbyname( hostname ) ) == NULL){
+                // get the host info
+                perror("gethostbyname");
+                return 1;
+        }
+        addr_list = (struct in_addr **) he->h_addr_list;
+        bzero(ip_address,100);
+        for(i = 0; addr_list[i] != NULL; i++){
+                //Return the first one;
+                strcpy(ip_address , inet_ntoa(*addr_list[i]) );
+                return 0;
+        }
+        return 1;
+}
+
 void client(int fd,char* host, char* buffer,char* port,char* path,char* http_version){
 
-      int sockfd;
+      int sockfd,host_fd;
       struct addrinfo hints, *servinfo, *p;
-      int rv;
+      int rv,dns_flag=0;
 
+      fstream cache;
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
       hints.ai_socktype = SOCK_STREAM;
-      if(0){//search_hostname(host)){
-        // In Cache : No DNS query required
-
+      char* ip_address=new char[100];
+      if(search_hostname(host,ip_address)){
+            // In Cache : No DNS query required
+            cout<<"No DNS query required : Found in Cache\n";
+            struct sockaddr_in serv_addr;
+            serv_addr.sin_family = AF_INET;
+            cout<<"IP: "<<ip_address<<endl;
+    				serv_addr.sin_addr.s_addr =inet_addr(ip_address);
+            //cout<<inet_addr(ip_address)<<endl;
+            int server_port=atoi(port);
+            //cout<<server_port<<endl;
+    				serv_addr.sin_port = htons(server_port);
+            host_fd=socket(AF_INET, SOCK_STREAM, 0);
+            if(host_fd<0)
+                cout<<"host socket creation failed";
+            if(connect(host_fd,(struct sockaddr *)&serv_addr,sizeof(serv_addr))<0){
+        						cout<<"DNS Cache function\n"<<endl;
+        						perror("connect:");
+                    exit(1);
+        		}
+            // to send from host_fd socket
+            dns_flag=1;
       }
       else{
             // perform DNS Query
@@ -81,8 +151,20 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
                       close(sockfd);
                       continue;
                   }
-                  cout<<"a--"<<p->ai_addr<<endl;
-                  // store DNS query in Cache
+
+                  char temp[100];
+                  char* temp1=new char[100];
+                  memcpy(temp,host,100);
+                  if(!proxy_hostname_to_ip(host,temp1)){
+                    // store DNS query in Cache
+                    cache.open("hostname",fstream::app | fstream::binary);
+                    cache.write(temp,strlen(temp));
+                    cache.write("\t",1);
+                    cache.write(temp1,strlen(temp1));
+                    cache.write("\r\n",2);
+                    cache.close();
+                  }
+
                   break; // if we get here, we must have connected successfully
             }
             if (p == NULL) {
@@ -93,6 +175,8 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
       }
 
       // create http request
+      if(dns_flag)sockfd=host_fd;
+
       memset((void*)buffer,MAXBUFSIZE,0);
       sprintf(buffer,"GET https://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n ",path,http_version,host);
       cout<<"\nProxy Request to Server:\n"<<buffer<<endl;
@@ -121,7 +205,7 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
       cout<<"\n end \n";
       shutdown(sockfd,SHUT_RDWR);
       close(sockfd);
-      freeaddrinfo(servinfo); // all done with this structure
+      //freeaddrinfo(servinfo); // all done with this structure
 }
 
 char* get_hostname(char* str){
@@ -208,7 +292,7 @@ int search_f_timeout(char* hash){
         sprintf(time_file,"%s",ctime(&attr.st_mtime));
         char* temp = strtok(time_file," ");
         temp=strtok(NULL," ");
-        temp=strtok(NULL," ");
+        char* day_1=strtok(NULL," ");
         temp=strtok(NULL," ");
         char* hr= strtok(temp,":");
         char* min=strtok(NULL,":");
@@ -223,12 +307,12 @@ int search_f_timeout(char* hash){
         time_file=asctime(timeinfo);
         temp = strtok(time_file," ");
         temp=strtok(NULL," ");
-        temp=strtok(NULL," ");
+        char* day_2=strtok(NULL," ");
         temp=strtok(NULL," ");
         char *hr_1= strtok(temp,":");
         char* min_1=strtok(NULL,":");
         char *sec_1=strtok(NULL,":");
-        if(strcmp(hr,hr_1)==0){
+        if(strcmp(day_1,day_2)==0){
           int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
           cout<<t2<<"\t"<<t1<<endl;
           int diff_t=t2-t1;
@@ -324,14 +408,32 @@ int blocked_list(char* hostname){
           blacklist.getline(buff,200);
           if(strcmp(buff,hostname)==0){
             cout<<"Hostname is Blacklisted : Cannot Service Request\n";
+            blacklist.close();
             return 1;
           }
       }
   }
   else cout<<"File not open\n";
+  blacklist.close();
   return 0;
 }
+int query_hostname(char* hostname){
+    fstream search_hostname;
+    char buff[2000];
+    hostent* valid_name=new hostent;
+    search_hostname.open("hostname",fstream::in | fstream::binary);
+    if(search_hostname.is_open()){
+        search_hostname.read(buff,2000);
+    }
+    search_hostname.close();
+    char* find;
+    find=strstr(buff,hostname);
+    if(find){cout<<"Found Hostname\n";return 0;}
 
+    valid_name=gethostbyname(hostname);
+    if(!valid_name)return 1; // bad hostname
+    return 0;
+}
 void request_parse(int fd){
       int recv_bytes;
       char* buffer=new char[MAXBUFSIZE];
@@ -361,9 +463,9 @@ void request_parse(int fd){
                   cout<<"Port:"<<port<<endl;
                   char* path=get_path(str);
                   cout<<"Path:"<<path<<endl;
-                  valid_name=gethostbyname(hostname);
+                  //valid_name=gethostbyname(hostname);
                   str=strtok(NULL," \r\n");
-                  if(!valid_name){
+                  if(query_hostname(hostname)){
                     cout<<"Host name failed : "<< h_errno<<endl;
                     handle_bad_hostname(clients[fd]);
                     shutdown(clients[fd],SHUT_RDWR);
@@ -411,10 +513,12 @@ int main(int argc ,char* argv[]){
       clients[i]=-1;
       int port=atoi(argv[1]);
       timeout = atoi(argv[2]);
-      int server_fd=create_socket(port);
-      cout<<"First : "<<server_fd<<endl;
+      server_fd=create_socket(port);
+      cout<<"Socket Created: "<<server_fd<<endl;
       int accept_fd=0;
-      while(1){
+      signal(SIGINT,signal_handler);
+      kill_server=0;
+      while(!kill_server){
             if ((clients[accept_fd] = accept(server_fd, (struct sockaddr *)&address,(socklen_t*)&addrlen))<0){
                     perror("accept");
                     //exit(1);
