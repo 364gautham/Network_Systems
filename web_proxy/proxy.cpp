@@ -59,29 +59,39 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
       hints.ai_socktype = SOCK_STREAM;
-      if ((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
-          fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-          exit(1);
+      if(0){//search_hostname(host)){
+        // In Cache : No DNS query required
+
       }
-      // loop through all the results and connect to the first we can
-      for(p = servinfo; p != NULL; p = p->ai_next){
-            if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                    p->ai_protocol)) == -1) {
-                perror("socket");
-                continue;
+      else{
+            // perform DNS Query
+            if ((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
+                fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+                exit(1);
             }
-            if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1){
-                perror("connect");
-                close(sockfd);
-                continue;
+            // loop through all the results and connect to the first we can
+            for(p = servinfo; p != NULL; p = p->ai_next){
+                  if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                          p->ai_protocol)) == -1) {
+                      perror("socket");
+                      continue;
+                  }
+                  if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1){
+                      perror("connect");
+                      close(sockfd);
+                      continue;
+                  }
+                  cout<<"a--"<<p->ai_addr<<endl;
+                  // store DNS query in Cache
+                  break; // if we get here, we must have connected successfully
             }
-            break; // if we get here, we must have connected successfully
+            if (p == NULL) {
+                // looped off the end of the list with no connection
+                fprintf(stderr, "failed to connect\n");
+                exit(2);
+            }
       }
-      if (p == NULL) {
-          // looped off the end of the list with no connection
-          fprintf(stderr, "failed to connect\n");
-          exit(2);
-      }
+
       // create http request
       memset((void*)buffer,MAXBUFSIZE,0);
       sprintf(buffer,"GET https://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n ",path,http_version,host);
@@ -203,7 +213,7 @@ int search_f_timeout(char* hash){
         char* hr= strtok(temp,":");
         char* min=strtok(NULL,":");
         char* sec=strtok(NULL,":");
-        int t1=atoi(hr)*3600+atoi(min)*60+atoi(sec);
+        int t1=(atoi(hr))*3600+(atoi(min))*60+atoi(sec);
         bzero(time_file,sizeof(time_file));
         // get current time
         time_t rawtime;
@@ -215,19 +225,18 @@ int search_f_timeout(char* hash){
         temp=strtok(NULL," ");
         temp=strtok(NULL," ");
         temp=strtok(NULL," ");
-        hr= strtok(temp,":");
-        min=strtok(NULL,":");
-        sec=strtok(NULL,":");
-        int t2=atoi(hr)*3600+atoi(min)*60+atoi(sec);
-        //delete[] time_file;
-        int diff_t=t2-t1;
-        if(diff_t>60)return 0;
-        else return 1;
+        char *hr_1= strtok(temp,":");
+        char* min_1=strtok(NULL,":");
+        char *sec_1=strtok(NULL,":");
+        if(strcmp(hr,hr_1)==0){
+          int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
+          cout<<t2<<"\t"<<t1<<endl;
+          int diff_t=t2-t1;
+          if(diff_t>60)return 0;
+          else {cout<<diff_t<<endl;return 1;}
+        }
     }
-    else{
-        // file doesn't exist
-        return 0;
-    }
+    return 0;  // file doesn't exist
 }
 int get_filesize(char* filename){
     // struct stat stat_buf;
@@ -291,14 +300,38 @@ void send_from_cache(int fd,char* path){
           }
           cache.close();
       }
-
     }
     //delete[] hash_key;
     //delete[] recv_buffer;
-
-
+}
+void handle_forbidden(int fd){
+    char * err = new char[500];
+    strcpy(err,"<HEAD><TITLE>HTTP ERROR 403 Forbidden </TITLE></HEAD>\n");
+    strcat(err,"<html><BODY>HTTP ERROR 403 Forbidden message: Blacklist site");
+    strcat(err,"\r\n");
+    strcat(err,"</BODY></html>");
+    if(send(fd,err,strlen(err),0) == -1) {
+      printf("failed to send\n");
+    }
 
 }
+int blocked_list(char* hostname){
+  fstream blacklist;
+  char buff[200];
+  blacklist.open("blacklist",fstream::in | fstream::binary);
+  if(blacklist.is_open()){
+      while(!blacklist.eof()){
+          blacklist.getline(buff,200);
+          if(strcmp(buff,hostname)==0){
+            cout<<"Hostname is Blacklisted : Cannot Service Request\n";
+            return 1;
+          }
+      }
+  }
+  else cout<<"File not open\n";
+  return 0;
+}
+
 void request_parse(int fd){
       int recv_bytes;
       char* buffer=new char[MAXBUFSIZE];
@@ -317,37 +350,44 @@ void request_parse(int fd){
       if(!strncmp(str,"GET",3)){
             //extract hostname,port,path
             str = strtok(NULL," ");
-
             char* hostname=get_hostname(str);
             cout<<"Hostname:"<<hostname<<endl;
-            char* port=get_port(str);
-            cout<<"Port:"<<port<<endl;
-            char* path=get_path(str);
-            cout<<"Path:"<<path<<endl;
-            valid_name=gethostbyname(hostname);
-            str=strtok(NULL," \r\n");
-            if(!valid_name){
-              cout<<"Host name failed : "<< h_errno<<endl;
-              handle_bad_hostname(clients[fd]);
-              shutdown(clients[fd],SHUT_RDWR);
-              close(clients[fd]);
-              clients[fd]=-1;
-              exit(1);
+            // check for blocked list
+            if(blocked_list(hostname)){
+                handle_forbidden(clients[fd]);
             }
             else{
-              //cout<<(valid_name->h_name)<<endl;
-                  if(check_cache(path)){
-                    //send from cache
-                    cout<<"Sending From Cache\n";
-                    send_from_cache(clients[fd],path);
+                  char* port=get_port(str);
+                  cout<<"Port:"<<port<<endl;
+                  char* path=get_path(str);
+                  cout<<"Path:"<<path<<endl;
+                  valid_name=gethostbyname(hostname);
+                  str=strtok(NULL," \r\n");
+                  if(!valid_name){
+                    cout<<"Host name failed : "<< h_errno<<endl;
+                    handle_bad_hostname(clients[fd]);
+                    shutdown(clients[fd],SHUT_RDWR);
+                    close(clients[fd]);
+                    clients[fd]=-1;
+                    exit(1);
                   }
                   else{
-                    //get from server and store in cache
-                    cout<<"FILE not found in cache, Request from server\n";
-                    client(clients[fd],hostname,buffer,port,path,str);
+                    //cout<<(valid_name->h_name)<<endl;
+                        if(check_cache(path)){
+                          //send from cache
+                          cout<<"Sending From Cache\n";
+                          send_from_cache(clients[fd],path);
+                        }
+                        else{
+                          //get from server and store in cache
+                          cout<<"FILE not found in cache, Request from server\n";
+                          client(clients[fd],hostname,buffer,port,path,str);
+                        }
+
                   }
 
             }
+
       }//end of get-check
       else{
         handle_non_GET(clients[fd]);

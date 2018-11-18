@@ -43,6 +43,7 @@ char* create_file(char* path);
 int check_cache(char* path);
 void request_parse(int fd);
 void send_from_cache(int fd);
-
+void handle_forbidden(int fd);
+int blocked_list(char* hostname);
 
 #endif
