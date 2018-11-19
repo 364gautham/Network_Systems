@@ -312,12 +312,13 @@ int search_f_timeout(char* hash){
         char *hr_1= strtok(temp,":");
         char* min_1=strtok(NULL,":");
         char *sec_1=strtok(NULL,":");
+        cout<<day_1<<"  "<<day_2<<endl;
         if(strcmp(day_1,day_2)==0){
           int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
-          cout<<t2<<"\t"<<t1<<endl;
+          //cout<<t2<<"\t"<<t1<<endl;
           int diff_t=t2-t1;
           if(diff_t>60)return 0;
-          else {cout<<diff_t<<endl;return 1;}
+          else {cout<<"Difference Seconds: "diff_t<<endl;return 1;}
         }
     }
     return 0;  // file doesn't exist
