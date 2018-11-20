@@ -4,7 +4,7 @@
 
 ## Running Instructions 
 * proxy.cpp is the source file. for compiling, type: make all in the folder
-* to run the server: ./proxy <port> <timeout for cache storage>
+* to run the server: ./proxy port_no timeout for cache storage (port number greater than 5000 , timeout in seconds)
 * Browser has to be set to connect to internet through proxy server to get features of proxy
 * make clean would clear the compiled file
 
