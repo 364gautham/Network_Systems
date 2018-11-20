@@ -3,7 +3,7 @@
 
 using namespace std;
 extern int h_errno;
-
+int plus_1;
 int timeout,kill_server,server_fd;
 int clients[CONNMAX];
 struct sockaddr_in address;
@@ -21,7 +21,7 @@ void signal_handler(int sig){
 }
 char* md5sum_create(const char* path){
       unsigned char digest[16];
-      printf("string length: %lu\n", strlen(path));
+      //printf("string length: %lu\n", strlen(path));
 
       MD5_CTX ctx;
       MD5_Init(&ctx);
@@ -178,7 +178,7 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
       if(dns_flag)sockfd=host_fd;
 
       memset((void*)buffer,MAXBUFSIZE,0);
-      sprintf(buffer,"GET https://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n ",path,http_version,host);
+      sprintf(buffer,"GET http://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n ",path,http_version,host);
       cout<<"\nProxy Request to Server:\n"<<buffer<<endl;
       if(send(sockfd,buffer,strlen(buffer),0) == -1)
           cout<<"failed to send\n";
@@ -191,23 +191,127 @@ void client(int fd,char* host, char* buffer,char* port,char* path,char* http_ver
       file.open(filename,fstream::out | fstream::binary);
       if(file.is_open()) cout<<"Proceed with storing cache\n";
       else cout<<"Error in creating Cache: fileopen\n";
+      int http_flag=0,http_file=0;char *a;
       do{
-        memset((void*)recv_buffer,MAXBUFSIZE,0);
-        recv_bytes=recv(sockfd,recv_buffer,MAXBUFSIZE,0);
-        if(recv_bytes)
-            cout<<"\nServer Response:\n"<<recv_buffer<< "\n";
-        if(send(fd,recv_buffer,recv_bytes,0) == -1)
-            cout<<"failed to send\n";
-        //write this data to cache
-        file.write(recv_buffer,recv_bytes);
+            memset((void*)recv_buffer,MAXBUFSIZE,0);
+            recv_bytes=recv(sockfd,recv_buffer,MAXBUFSIZE,0);
+            if(recv_bytes)
+                cout<<"\nServer Response:\n"<<recv_buffer<< "\n";
+            if(send(fd,recv_buffer,recv_bytes,0) == -1)
+                cout<<"failed to send\n";
+            //write this data to cache
+            file.write(recv_buffer,recv_bytes);
+            // check for html file : for Prefetching
+            if(!http_flag){
+                if((a=strstr(recv_buffer,"Content-Type: text/html"))!=NULL){
+                      http_file=1;http_flag=1;
+                }
+            }
       }while(recv_bytes>0);
       file.close();
-      cout<<"\n end \n";
+      //Prefetching operation
+      if(http_file){
+          //found html -fork a thread to fetch links in background
+          // if(fork()==0){
+              fetch_links(filename,sockfd,http_version,host);
+          //    exit(0);
+          // }
+          // else{
+          //   waitpid(-1,NULL,WNOHANG);
+          // }
+      }
+      cout<<"debug "<<plus_1<<endl;
+      cout<<"\n end \n"<<http_file;
       shutdown(sockfd,SHUT_RDWR);
       close(sockfd);
       //freeaddrinfo(servinfo); // all done with this structure
 }
 
+
+void fetch_links(char* filename,int fd,char* http_version,char* host){
+    char buf[1024],file_n[200],link[200],recv_buffer[MAXBUFSIZE],fetchrequest[MAXBUFSIZE];
+    fstream file;
+    memcpy(file_n,filename,strlen(filename));
+    file.open(file_n,fstream::in | fstream::binary);
+    bzero(buf,1024);
+    int i,recv_bytes,host_fd;
+    char *readptr;
+    /************************************************/
+    char* ip_address=new char[100];
+    if(search_hostname(host,ip_address)){
+          // In Cache : No DNS query required
+          cout<<"No DNS query required : Found in Cache\n";
+          struct sockaddr_in serv_addr;
+          serv_addr.sin_family = AF_INET;
+          cout<<"IP: "<<ip_address<<endl;
+          serv_addr.sin_addr.s_addr =inet_addr(ip_address);
+          //cout<<inet_addr(ip_address)<<endl;
+          int server_port=80;
+          //cout<<server_port<<endl;
+          serv_addr.sin_port = htons(server_port);
+          host_fd=socket(AF_INET, SOCK_STREAM, 0);
+          if(host_fd<0)
+              cout<<"host socket creation failed";
+          if(connect(host_fd,(struct sockaddr *)&serv_addr,sizeof(serv_addr))<0){
+                  cout<<"DNS Cache function\n"<<endl;
+                  perror("connect:");
+                  exit(1);
+          }
+    }
+    plus_1=0;
+    if(file.is_open()){
+      while(file.getline(buf,1024)){
+        if((readptr=strstr(buf,"href=\"http://"))!= NULL){
+              plus_1++;
+              readptr = readptr+6;
+              i=0;
+              // extracting the http url after href command
+              while(*readptr!='"') {
+                        link[i] = *readptr;
+                        readptr++;
+                        i++;
+              }
+              link[i]='\0';
+              cout<<"Link is: "<<link<<endl;
+              //strcat(link,"/");
+              char* host=get_hostname(link);
+              cout<<"Host in Prefetch:"<<host<<endl;
+              // create md5sum for link
+              char *fetch_file;
+              fstream file_1;
+              fetch_file=create_file(link);
+              file_1.open(fetch_file,fstream::out | fstream::binary);
+              if(file_1.is_open()) cout<<"Proceed with prefetch cache\n";
+              else cout<<"Error in creating prefetch cache: fileopen\n";
+              // create request for server
+              sprintf(fetchrequest,"GET %s %s\r\nHost: %s\r\nConnection: close\r\n\r\n ",link,http_version,host);
+              cout<<"\nProxy prefetch request to Server:\n"<<fetchrequest<<endl;
+              int a;
+              if((a=send(host_fd,fetchrequest,strlen(fetchrequest),0) )== -1)
+                  cout<<"failed to send\n";
+              memset((void*)recv_buffer,MAXBUFSIZE,0);
+              cout<<a<<endl;
+              do{
+                    recv_bytes=recv(host_fd,recv_buffer,MAXBUFSIZE,0);
+                    cout<<recv_bytes;
+                    if(recv_bytes)
+                        cout<<"\nServer Response for Prefetch:\n"<<recv_buffer<< "\n";
+                    //write this data to cache
+                    file_1.write(recv_buffer,recv_bytes);
+                    // check for html file : for Prefetching
+                    memset((void*)recv_buffer,MAXBUFSIZE,0);
+              }while(recv_bytes>0);
+              file_1.close();
+        }
+        //mext next link
+        bzero(buf,1024);
+        bzero(link,200);
+        bzero(fetchrequest,MAXBUFSIZE);
+
+      }
+    }
+    file.close();
+}
 char* get_hostname(char* str){
     str=str+7;
     char *temp = strrchr(str,'/');
@@ -312,22 +416,16 @@ int search_f_timeout(char* hash){
         char *hr_1= strtok(temp,":");
         char* min_1=strtok(NULL,":");
         char *sec_1=strtok(NULL,":");
-        cout<<day_1<<"  "<<day_2<<endl;
+        cout<<"Date created:"<<day_1<<" Date Requested: "<<day_2<<endl;
         if(strcmp(day_1,day_2)==0){
           int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
           //cout<<t2<<"\t"<<t1<<endl;
           int diff_t=t2-t1;
           if(diff_t>60)return 0;
-          else {cout<<"Difference Seconds: "diff_t<<endl;return 1;}
+          else {cout<<"Difference Seconds: "<<diff_t<<endl;return 1;}
         }
     }
     return 0;  // file doesn't exist
-}
-int get_filesize(char* filename){
-    // struct stat stat_buf;
-    // int rc = stat(filename, &stat_buf);
-    // return rc == 0 ? stat_buf.st_size : -1;
-    return 1;
 }
 int get_filecreation_time(char* filename){
 
@@ -340,7 +438,6 @@ char* create_file(char* path){
 
     cache.open(hash_key);
     if(cache.is_open())cout<<"File creation Success\n";
-    else cout<<"Error: create_file()\n";
     cache.close();
 
     return hash_key;
@@ -414,7 +511,7 @@ int blocked_list(char* hostname){
           }
       }
   }
-  else cout<<"File not open\n";
+  //else cout<<"File not open\n";
   blacklist.close();
   return 0;
 }
