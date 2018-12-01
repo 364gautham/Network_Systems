@@ -33,9 +33,8 @@
 
 #define CONNMAX 1000
 #define BYTES 1024
-int kill_server,server_fd;
-int clients[CONNMAX];
-int slot,conn_aliv;
+volatile int kill_server;
+int clients[CONNMAX],server_fd,slot,conn_aliv;
 
 char root[50]="/home/gautham/Network Systems/p_2/www";
 
