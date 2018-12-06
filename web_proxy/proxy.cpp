@@ -466,10 +466,6 @@ void send_from_cache(int fd,char* path){
     fstream cache;
     int size,recv_bytes;
     char *recv_buffer=new char[MAXBUFSIZE];
-    if((size = get_filesize(hash_key)) == -1){
-        cout<<"Error in file : Filesize \n";
-    }
-    else{
       //read from file
       cache.open(hash_key,fstream::in | fstream::binary);
       if (cache.is_open())
@@ -482,7 +478,6 @@ void send_from_cache(int fd,char* path){
           }
           cache.close();
       }
-    }
     //delete[] hash_key;
     //delete[] recv_buffer;
 }
