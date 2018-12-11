@@ -421,7 +421,7 @@ int search_f_timeout(char* hash){
           int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
           //cout<<t2<<"\t"<<t1<<endl;
           int diff_t=t2-t1;
-          if(diff_t>60)return 0;
+          if(diff_t>timeout)return 0;
           else {cout<<"Difference Seconds: "<<diff_t<<endl;return 1;}
         }
     }
