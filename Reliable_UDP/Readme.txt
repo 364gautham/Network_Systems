@@ -1,7 +1,7 @@
 # Documentation for UDP client server reliable transfer implementation
 
 This program uses UDP - Connection less sockets for file transfer and implements reliability around this protocol.
-UDP is by default a not un-reliable transport layer protocol used for speed and real time services like video services.
+UDP is by default a un-reliable transport layer protocol used for speed and real time services like video services.
 
 We have implemented reliability around it without keeping in mind the time[ user interaction real time service].
 

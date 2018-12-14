@@ -421,7 +421,7 @@ int search_f_timeout(char* hash){
           int t2=(atoi(hr_1))*3600+(atoi(min_1))*60+atoi(sec_1);
           //cout<<t2<<"\t"<<t1<<endl;
           int diff_t=t2-t1;
-          if(diff_t>60)return 0;
+          if(diff_t>timeout)return 0;
           else {cout<<"Difference Seconds: "<<diff_t<<endl;return 1;}
         }
     }
@@ -466,10 +466,6 @@ void send_from_cache(int fd,char* path){
     fstream cache;
     int size,recv_bytes;
     char *recv_buffer=new char[MAXBUFSIZE];
-    if((size = get_filesize(hash_key)) == -1){
-        cout<<"Error in file : Filesize \n";
-    }
-    else{
       //read from file
       cache.open(hash_key,fstream::in | fstream::binary);
       if (cache.is_open())
@@ -482,7 +478,6 @@ void send_from_cache(int fd,char* path){
           }
           cache.close();
       }
-    }
     //delete[] hash_key;
     //delete[] recv_buffer;
 }

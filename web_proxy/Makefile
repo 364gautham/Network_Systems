@@ -1,5 +1,5 @@
 .PHONY: all
-all: proxy.c
+all:
 	g++ -o proxy proxy.cpp -lcrypto
 
 .PHONY: clean
