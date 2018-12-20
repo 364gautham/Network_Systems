@@ -1,10 +1,24 @@
+/********************************************************************************************************
+*
+* UNIVERSITY OF COLORADO BOULDER
+*
+* @file server.cpp
+* @brief DIstributed File System: Server Program : Accepts cient request and processing
+*
+* @author  Gautham K A
+* @date  12/15/2018
+*
+********************************************************************************************************/
+
+
+
 #include "s_header.h"
 
 struct sockaddr_in address;
 int addrlen = sizeof(address);
-int accept_fd,kill_server;
+int accept_fd,kill_server,piece[5][4];
 char s_conf[MAX];
-char username[MAX],password[MAX];
+char username[MAX],password[MAX],get_dir[MAX],get_filename[MAX];
 
 void signal_handler(int sig){
   printf("Server Exiting!!\n");
@@ -133,17 +147,22 @@ void receive_file(int server_num){
   }
 
   //create subfolder for the username
-  sprintf(p_dir+(strlen(p_dir)),"/%s",subfolder);
-  cout<<"sub_folder Directory is "<<p_dir<<endl;
-  if(!(is_dir(p_dir))){
-    if((mkdir(p_dir,0777))<0)
-      perror("mkdir");
-    else
-      cout<<"subfolder username Directory\n";
+  if(subfolder){
+    sprintf(p_dir+(strlen(p_dir)),"/%s",subfolder);
+    cout<<"sub_folder Directory is "<<p_dir<<endl;
+    if(!(is_dir(p_dir))){
+      if((mkdir(p_dir,0777))<0)
+        perror("mkdir");
+      else
+        cout<<"subfolder username Directory\n";
+    }
   }
-
   char create_file[200];
-  sprintf(create_file,"%s%s",p_dir,filename);
+  if(subfolder)
+    sprintf(create_file,"%s%s",p_dir,filename);
+  else
+    sprintf(create_file,"%s/%s",p_dir,filename);
+
   cout<<"File with Path is :"<<create_file<<endl;
 
   fstream fd;
@@ -159,29 +178,232 @@ void receive_file(int server_num){
   fd.close();
   cout<<"Writing file is done\n";
 }
+bool fileExists(const char *fileName){
+    ifstream infile(fileName);
+    return infile.good();
+}
+int get_check(int server_num){
+    //receive GET filename
+    char filename[MAX],subfolder[MAX];
+    recv(accept_fd,filename,sizeof(filename),0);
+    memset(get_filename,0,MAX);
+    strcpy(get_filename,filename);
+    //recv subfolder
+    recv(accept_fd,subfolder,sizeof(subfolder),0);
+    if(!subfolder)cout<<"subfolder NULL\n";
+    //create filepath
+    char g_dir[MAX];
+    memset(g_dir,0,MAX);
+    getcwd(g_dir,MAX);
+    if(subfolder)
+      sprintf(get_dir,"%s/DFS%d/%s/%s",g_dir,server_num,username,subfolder);
+    else
+      sprintf(get_dir,"%s/DFS%d/%s/",g_dir,server_num,username);
+    int file_count=0;
+    //check file1
+    char new_f[MAX],path[MAX];
+    sprintf(new_f,".%s.1",filename);
+    cout<< " file piece:" <<new_f<<endl;
+    sprintf(path,"%s%s",get_dir,new_f);
+    cout<<"file path:"<<path<<endl;
+    if(fileExists(path))
+    {
+      file_count++;
+      piece[server_num][0]=1;
+    }
+    memset(new_f,0,100);
+    memset(path,0,100);
+
+    //check file2
+    sprintf(new_f,".%s.2",filename);
+    sprintf(path,"%s%s",get_dir,new_f);
+    cout<<"file path:"<<path<<endl;
+    if(fileExists(path))
+    {
+      file_count++;
+      piece[server_num][1]=1;
+    }
+    memset(new_f,0,100);
+    memset(path,0,100);
+
+    //check file3
+    sprintf(new_f,".%s.3",filename);
+    sprintf(path,"%s%s",get_dir,new_f);
+    cout<<"file path:"<<path<<endl;
+    if(fileExists(path))
+    {
+      file_count++;
+      piece[server_num][2]=1;
+    }
+    memset(new_f,0,100);
+    memset(path,0,100);
+
+    //check file4
+    sprintf(new_f,".%s.4",filename);
+    sprintf(path,"%s%s",get_dir,new_f);
+    cout<<"file path:"<<path<<endl;
+    if(fileExists(path))
+    {
+      file_count++;
+      piece[server_num][3]=1;
+    }
+    memset(new_f,0,100);
+    memset(path,0,100);
+
+    int ack=1;
+    cout<<"File count:"<<file_count<<" server:"<<server_num<<endl;
+    if(file_count>1) {
+      send(accept_fd,&ack,sizeof(int),0);
+      return 1;
+    }
+    else{
+      ack=0;
+      send(accept_fd,&ack,sizeof(int),0);
+      return 0;
+    }
+}
+void send_pfile(int server_num){
+    int filesize,i;
+    char filename[MAX],path[MAX];
+    fstream fd;
+    memset(piece,0,sizeof(piece));
+    if(get_check(server_num)){
+      strcpy(path,get_dir);
+      // send pieces - filesize, filename, contents
+      for(i=0;i<4;i++){
+          if(piece[server_num][i]){
+            sprintf(filename,".%s.%d",get_filename,i+1);
+            strcat(path,filename);
+            cout<<"Path sending:"<<path<<endl;
+            filesize=compute_filesize(path);
+            cout<<"filesize:"<<filesize<<endl;
+            send(accept_fd,&filesize,sizeof(int),0);
+            send(accept_fd,filename,sizeof(filename),0);
+            fd.open(path,fstream::in|fstream::binary);
+            char* buff = new char[filesize];
+            memset(buff, 0, sizeof(buff));
+            fd.read(buff,filesize);
+            encrypt_decrypt_data(buff,filesize,password);
+            send(accept_fd,buff,filesize,0);
+            //cout<<"File Sent after Encryption to Server\n"<<endl;
+            delete buff;
+            fd.close();
+            memset(path,0,MAX);
+            memset(filename,0,MAX);
+            strcpy(path,get_dir);
+            piece[server_num][i]=0;
+          }
+      }
+    }
+}
+void list_files(int server_num){
+    //receive subfolder details
+    char subfolder[MAX],path[MAX];
+    char p_dir[200];
+    memset(p_dir,0,200);
+    getcwd(p_dir,200);
+    memset(subfolder,0,MAX);
+    recv(accept_fd,subfolder,sizeof(subfolder),0);
+    // create folder Path
+    if(subfolder[0]!='/')
+      sprintf(path,"%s/DFS%d/%s/%s",p_dir,server_num,username,subfolder);
+    else
+      sprintf(path,"%s/DFS%d/%s%s",p_dir,server_num,username,subfolder);
+
+    // write all files in the path-directory into file
+    fstream fd;
+    char file_n[MAX];
+    sprintf(file_n,"%s%d","temp",server_num);
+    fd.open(file_n,fstream::out|fstream::binary);
+    if(fd.fail())perror("file open list");
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir (path)) != NULL) {
+
+      while ((ent = readdir (dir)) != NULL) {
+          fd.write(ent->d_name,strlen(ent->d_name));
+  				fd.write("\n",1);
+      }
+    fd.close();
+    closedir (dir);
+    }
+    else{
+      /* could not open directory */
+      perror ("Open Dir");
+    }
+    //send filecontents and its size
+    int fs=compute_filesize(file_n);
+    cout<<"LIST file size:"<<fs<<endl;
+    send(accept_fd,&fs,sizeof(int),0);
+
+    fd.open(file_n,fstream::in|fstream::binary);
+    char *buf=new char[fs];
+    fd.read(buf,fs);
+    encrypt_decrypt_data(buf,fs,password);
+    send(accept_fd,buf,fs,0);
+    fd.close();
+    cout<<"Sent File in List files function\n";
+    remove(file_n);
+
+}
+
 void client_handle(int port){
     int option,s_port;
-    recv(accept_fd,&option,sizeof(option),0);
-    cout<<"Option: "<<option<<endl;
-    switch(option){
-      case PUT:
-            int valid=1;
-            // checking authenticity of user
-            if(!read_dfs_file()){
-              valid=0;
-              send(accept_fd,&valid,sizeof(valid),0);
-              break;
-            }
-            else{
-              send(accept_fd,&valid,sizeof(valid),0);
-              s_port=port%5; // 1,2,3,4 for DFS1,DFS2,DFS3,DFS4
-              //first piece
-              receive_file(s_port);
-              //second piece
-              receive_file(s_port);
-              break;
-            }
-    }
+    int valid;
+    //while(1){
+      recv(accept_fd,&option,sizeof(option),0);
+      cout<<"Option: "<<option<<endl;
+      switch(option){
+        case PUT:
+              // checking authenticity of user
+              if(!read_dfs_file()){
+                valid=0;
+                send(accept_fd,&valid,sizeof(valid),0);
+                break;
+              }
+              else{
+                valid=1;
+                send(accept_fd,&valid,sizeof(valid),0);
+                s_port=port%5; // 1,2,3,4 for DFS1,DFS2,DFS3,DFS4
+                //first piece
+                receive_file(s_port);
+                //second piece
+                receive_file(s_port);
+                break;
+              }
+        case GET:
+              valid=1;
+              // checking authenticity of user
+              if(!read_dfs_file()){
+                  valid=0;
+                  send(accept_fd,&valid,sizeof(valid),0);
+                  break;
+              }
+              else{
+                send(accept_fd,&valid,sizeof(valid),0);
+                s_port=port%5; // 1,2,3,4 for DFS1,DFS2,DFS3,DFS4
+
+                send_pfile(s_port);
+                break;
+              }
+        case LIST:
+              valid=1;
+              // checking authenticity of user
+              if(!read_dfs_file()){
+                  valid=0;
+                  send(accept_fd,&valid,sizeof(valid),0);
+                  break;
+              }
+              else{
+                send(accept_fd,&valid,sizeof(valid),0);
+                s_port=port%5;
+                list_files(s_port);
+                break;
+              }
+      }
+
+    //}
+
 }
 
 int main(int argc ,char* argv[]){

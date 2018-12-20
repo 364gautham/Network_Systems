@@ -32,15 +32,29 @@ using namespace std;
 #define MAXLINE 1024
 #define MAX 100
 
-
+/* reading configuration file for server , username and password information*/
 void read_dfc_file(const char filename[50]);
+/*creates socket connection to servers , stores socket descriptor*/
 void create_client_connections();
+/* computes filesize given filename*/
 int compute_filesize(char filename[30]);
-void split_files_in_4(char filename[30]);
+/* splits files into 4 to be put into 4 different servers*/
+int split_files_in_4(char filename[30]);
+/* xor encryption*/
 void encrypt_decrypt_data(char *buf,int size,char pwd[MAX]);
+/* helper fucntion for sending file pieces to server - hash mod piece table*/
 void send_files(char filename[MAX]);
-void send_f(int server_num,int file_piece);
+/* helper for sending fucntion*/
+void send_helper(int server_num,int file_piece);
+/* to check for access to server*/
 int access_grant(int option);
 /* interrupt signla handler for gracious exit*/
 void signal_handler(int sig);
+/* to combine file pieces received from server*/
+void combine_files();
+/* list files prsent in the server*/
+void list_files();
+/* to combine pieces to display complete or imcomplete file for output of list function*/
+void read_listfile(char* buf, char fname[MAX],int fs);
+
 #endif
