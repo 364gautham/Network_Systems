@@ -5,7 +5,7 @@
 ## Web Proxy Server
   A simple web proxy server (forward proxy) that is capable of accepting HTTP requests from clients, pass them to HTTP server and handle returning traffic from the HTTP server back to clients
 
-## Web_Sever
+## Web_Server
   HTTP-based web server that handles multiple simultaneous requests from users
 
 ## Reliable UDP
